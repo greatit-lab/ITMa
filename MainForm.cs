@@ -160,7 +160,8 @@ namespace ITM_Agent
             else
             {
                 // 강제 종료 등 다른 이유로 닫힐 때 처리
-                fileWatcherManager.StopWatchers();
+                //fileWatcherManager.StopWatchers();
+                fileWatcherManager?.StopWatchers();     // [추가] NRE 방지
                 trayIcon?.Dispose();
                 Environment.Exit(0);
             }
