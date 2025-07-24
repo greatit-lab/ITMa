@@ -374,7 +374,7 @@ namespace Onto_WaferFlatDataLib
                     string colList   = string.Join(",", cols.Select(c => $"\"{c}\""));
                     string paramList = string.Join(",", cols.Select(c => "@" + c));
                     
-                    string sql = $"INSERT INTO wf_flat ({colList}) VALUES ({paramList});";
+                    string sql = $"INSERT INTO public.wf_flat ({colList}) VALUES ({paramList});";
 
                     using (var cmd = new NpgsqlCommand(sql, conn, tx))
                     {
