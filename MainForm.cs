@@ -10,6 +10,7 @@ namespace ITM_Agent
 {
     public partial class MainForm : Form
     {
+        private bool isExiting = false;              // [추가] 중복·재귀 종료 방지
         private SettingsManager settingsManager;
         private LogManager logManager;
         private FileWatcherManager fileWatcherManager;
@@ -156,14 +157,15 @@ namespace ITM_Agent
                 trayIcon.BalloonTipTitle = "ITM Agent";
                 trayIcon.BalloonTipText = "ITM Agent가 백그라운드에서 실행 중입니다.";
                 trayIcon.ShowBalloonTip(3000); // 3초 동안 풍선 도움말 표시
+                return;                     // 더 진행하지 않음
             }
-            else
+            // ② Alt+F4, 메뉴 Quit, Application.Exit 등 ‘실제 종료’ 요청
+            if (!isExiting)
             {
-                // 강제 종료 등 다른 이유로 닫힐 때 처리
-                //fileWatcherManager.StopWatchers();
-                fileWatcherManager?.StopWatchers();     // [추가] NRE 방지
-                trayIcon?.Dispose();
-                Environment.Exit(0);
+                e.Cancel  = true;           // 첫 진입에서는 일단 취소
+                isExiting = true;           // 재진입 차단 플래그       // [추가]
+                PerformQuit();              // 공통 종료 루틴 호출      // [추가]
+                return;
             }
         }
 
