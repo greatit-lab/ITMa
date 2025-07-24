@@ -9,6 +9,7 @@ using iText.Layout.Element;
 using iText.Layout.Properties;
 using iText.Kernel.Geom;
 using IOPath = System.IO.Path;   // ← 이후 모든 경로 처리에 IOPath 사용
+using System.Threading;    // [추가]
 
 namespace ITM_Agent.Services
 {
@@ -92,8 +93,11 @@ namespace ITM_Agent.Services
                         string imgPath = imagePaths[i];
                         try
                         {
-                            var imgData = ImageDataFactory.Create(imgPath);
-                            var img     = new Image(imgData);
+                            {
+                            // ---------- 파일 스트림 잠김 방지 ----------
+                            byte[] imgBytes = File.ReadAllBytes(imgPath);           // 추가
+                            var imgData = ImageDataFactory.Create(imgBytes);    // (imgPath) 수정
+                            var img = new Image(imgData);
                             float w = img.GetImageWidth(), h = img.GetImageHeight();
 
                             if (i > 0)
@@ -121,31 +125,57 @@ namespace ITM_Agent.Services
                 int delOk = 0, delFail = 0;
                 foreach (string imgPath in imagePaths)
                 {
-                    try
+                    if (DeleteFileWithRetry(imgPath, maxRetry: 5, delayMs: 300))   // [수정]
                     {
-                        if (File.Exists(imgPath))
-                        {
-                            File.Delete(imgPath);
-                            delOk++;
-                            if (isDebugMode)
-                                logManager.LogDebug($"[PdfMergeManager] Deleted image file: {imgPath}");
-                        }
+                        delOk++;
+                        if (isDebugMode)
+                            logManager.LogDebug($"[PdfMergeManager] Deleted image file: {imgPath}");
                     }
-                    catch (Exception exDel)
+                    else
                     {
                         delFail++;
-                        logManager.LogError($"[PdfMergeManager] Failed to delete '{imgPath}': {exDel.Message}");
                     }
                 }
-
+        
                 logManager.LogEvent($"[PdfMergeManager] Merge completed. " +
-                                    $"Images merged: {imageCount}, deleted: {delOk}, delete-failed: {delFail}");
+                                    $"Images merged: {imagePaths.Count}, deleted: {delOk}, delete-failed: {delFail}");
             }
             catch (Exception ex)
             {
                 logManager.LogError($"[PdfMergeManager] MergeImagesToPdf failed. Exception: {ex.Message}");
                 throw;  // 상위 호출부로 재전달
             }
+        }
+        
+        /* ===================== [추가] 헬퍼 메서드 ===================== */
+        /// <summary>
+        /// 파일 잠김 문제를 고려해 삭제를 재시도한다.
+        /// </summary>
+        private bool DeleteFileWithRetry(string filePath, int maxRetry = 5, int delayMs = 300)
+        {
+            for (int attempt = 1; attempt <= maxRetry; attempt++)
+            {
+                try
+                {
+                    if (File.Exists(filePath))
+                    {
+                        File.SetAttributes(filePath, FileAttributes.Normal); // Read-only 해제
+                        File.Delete(filePath);
+                    }
+                    return true;  // 성공
+                }
+                catch (IOException) when (attempt < maxRetry)
+                {
+                    Thread.Sleep(delayMs);   // 잠시 대기 후 재시도
+                }
+                catch (Exception ex)
+                {
+                    logManager.LogError($"[PdfMergeManager] Delete retry {attempt} failed: {ex.Message}");
+                    if (attempt >= maxRetry) return false;
+                    Thread.Sleep(delayMs);
+                }
+            }
+            return false;
         }
     }
 }
