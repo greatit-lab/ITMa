@@ -6,7 +6,7 @@ using System.IO;
 using System.Linq;
 using System.Text;
 using System.Text.RegularExpressions;
-using MySql.Data.MySqlClient;
+using Npgsql;               // ★ MySql → Npgsql
 using ConnectInfo;
 using System.Threading;
 
@@ -88,7 +88,9 @@ namespace Onto_WaferFlatDataLib
                     using (var fs = new FileStream(path, FileMode.Open,
                                                    FileAccess.Read, FileShare.ReadWrite))
                     using (var sr = new StreamReader(fs, enc))
+                    {
                         return sr.ReadToEnd();
+                    }
                 }
                 catch (IOException)
                 {
@@ -349,33 +351,41 @@ namespace Onto_WaferFlatDataLib
             }
         
             // ★ 수정 : 파일명을 함께 전달
-            UploadToMySQL(dt, Path.GetFileName(filePath));
+            UploadToSQL(dt, Path.GetFileName(filePath));
         
             SimpleLogger.Event($"{Path.GetFileName(filePath)} ▶ rows={dt.Rows.Count}");
             try { File.Delete(filePath); } catch { /* ignore */ }
         }
         
         #region === DB Upload ===
-        private void UploadToMySQL(DataTable dt, string srcFile)
+        private void UploadToSQL(DataTable dt, string srcFile)
         {
             var dbInfo = DatabaseInfo.CreateDefault();
-            using (var conn = new MySqlConnection(dbInfo.GetConnectionString()))
+            using (var conn = new NpgsqlConnection(dbInfo.GetConnectionString()))
             {
                 conn.Open();
                 using (var tx = conn.BeginTransaction())
                 {
-                    var cols = dt.Columns.Cast<DataColumn>().Select(c => c.ColumnName).ToArray();
-                    string sql = $"INSERT INTO wf_flat ({string.Join(",", cols)}) " +
-                                 $"VALUES ({string.Join(",", cols.Select(c => "@" + c))})";
-        
-                    using (var cmd = new MySqlCommand(sql, conn, tx))
+                    // 1) 컬럼 파라미터 목록 동적 생성
+                    var cols = dt.Columns.Cast<DataColumn>()
+                                        .Select(c => c.ColumnName)
+                                        .ToArray();
+                    // PostgreSQL 은 대소문자/예약어 충돌 방지를 위해 "컬럼" 을 큰따옴표로 감쌉니다
+                    string colList   = string.Join(",", cols.Select(c => $"\"{c}\""));
+                    string paramList = string.Join(",", cols.Select(c => "@" + c));
+                    
+                    string sql = $"INSERT INTO wf_flat ({colList}) VALUES ({paramList});";
+
+                    using (var cmd = new NpgsqlCommand(sql, conn, tx))
                     {
+                        // 2) 파라미터 미리 준비
                         foreach (var c in cols)
-                            cmd.Parameters.Add(new MySqlParameter("@" + c, DBNull.Value));
+                            cmd.Parameters.Add(new NpgsqlParameter("@" + c, DbType.Object));
         
                         int ok = 0;
                         try
                         {
+                            // 3) DataTable → INSERT 루프
                             foreach (DataRow r in dt.Rows)
                             {
                                 foreach (var c in cols)
@@ -387,28 +397,24 @@ namespace Onto_WaferFlatDataLib
                             tx.Commit();
                             SimpleLogger.Debug($"DB OK ▶ {ok} rows");
                         }
-                        /* ───── 중복 키(1062) 전용 ───── */
-                        catch (MySqlException mex) when (mex.Number == 1062)
+                        /* ───── 중복 키(unique_violation = 23505) 전용 ───── */
+                        catch (PostgresException pex) when (pex.SqlState == "23505")
                         {
                             tx.Rollback();
-        
-                            // ① 자세한 내용은 Debug 로그
-                            SimpleLogger.Debug($"Duplicate entry skipped ▶ {mex.Message}");
-        
-                            // ② Error 로그는 “업로드 생략” 한 줄만
+                            SimpleLogger.Debug($"Duplicate entry skipped ▶ {pex.Message}");
                             SimpleLogger.Error(
                                 $"동일한 데이터가 이미 등록되어 업로드가 생략되었습니다 ▶ {srcFile}");
                         }
-                        /* ───── 기타 MySQL 오류 ───── */
-                        catch (MySqlException mex)
+                        /* ───── 기타 PostgreSQL 오류 ───── */
+                        catch (PostgresException pex)
                         {
                             tx.Rollback();
                             var sb = new StringBuilder()
-                                .AppendLine($"MySQL ERRNO={mex.Number}")
-                                .AppendLine($"Message={mex.Message}")
-                                .AppendLine("SQL=" + sql);
-                            foreach (MySqlParameter p in cmd.Parameters)
-                                sb.AppendLine($"{p.ParameterName}={p.Value}");
+                                .AppendLine($"PG CODE = {pex.SqlState}")
+                                .AppendLine($"Message  = {pex.Message}")
+                                .AppendLine("SQL      = " + sql);
+                            foreach (NpgsqlParameter p in cmd.Parameters)
+                                sb.AppendLine($"{p.ParameterName} = {p.Value}");
                             SimpleLogger.Error("DB FAIL ▶ " + sb);
                         }
                         /* ───── 그 외 예외 ───── */
