@@ -284,7 +284,7 @@ namespace ITM_Agent
             // 경고창 표시
             DialogResult result = MessageBox.Show(
                 "프로그램을 중지하시겠습니까?￦n모든 파일 감시 및 업로드 기능이 중단됩니다.",
-                "장업 중지 확인",
+                "작업 중지 확인",
                 MessageBoxButtons.YesNo,
                 MessageBoxIcon.Warning);
             
@@ -354,7 +354,7 @@ namespace ITM_Agent
                 fileWatcherManager?.StopWatchers();   // ☑ Dispose → StopWatchers
                 fileWatcherManager = null;
                 
-                // settingsManager는 Dispose 필요 없음
+                // SettingsManager는 Dispose 필요 없음
                 settingsManager = null;
             }
             catch (Exception ex)
@@ -376,14 +376,14 @@ namespace ITM_Agent
             }
             catch (Exception ex)
             {
-                logManager?.LogEvent($"[MainForm] Tray clean-up error: {ex}");
+                logManager?.LogError($"[MainForm] Tray clean-up error: {ex}");
             }
             
             /* 3) 애플리케이션 종료 */
             BeginInvoke(new Action(() =>
             {
                 logManager?.LogEvent("[MainForm] Application.Exit invoked.");
-                Application.Exit();                   // Encironment.Exit → Application.Exit
+                Application.Exit();                   // Environment.Exit → Application.Exit
             }));
         }
 
