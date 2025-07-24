@@ -106,20 +106,20 @@ namespace ITM_Agent.Services
                     int existingRecords = 0;
                     using (var selCmd = new NpgsqlCommand(SELECT_SQL, conn))
                     {
-                        selectCmd.Parameters.AddWithValue("@eqpid", eqpid);
-                        selectCmd.Parameters.AddWithValue("@pc_name", machineName);
-                        existingRecords = Convert.ToInt32(selectCmd.ExecuteScalar());
+                        selCmd.Parameters.AddWithValue("@eqpid", eqpid);
+                        selCmd.Parameters.AddWithValue("@pc_name", machineName);
+                        existingRecords = Convert.ToInt32(selCmd.ExecuteScalar());
                     }
                     
                     if (existingRecords > 0)
                     {
                         logManager.LogEvent(
-                            $"[EqpidManager] Entry already exists for Eqpid: {eqpid} and PC Name: {machineName}. Skipping upload.");
+                            $"[EqpidManager] Entry already exists for Eqpid={eqpid}, PC={machineName}. Skipping upload.");
                         return;
                     }
                     
                     /* 3) INSERT … ON CONFLICT → UPSERT */
-                    const string insertQuery = @"
+                    const string INSERT_SQL = @"
                         INSERT INTO public.agent_info
                         (eqpid, type, os, system_type, pc_name, locale, timezone, app_ver, reg_date, servtime)
                         VALUES
