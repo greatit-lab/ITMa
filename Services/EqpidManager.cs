@@ -1,8 +1,9 @@
 // Services\EqpidManager.cs
 using System;
 using System.Windows.Forms;
-using MySql.Data.MySqlClient;  // MySql.Data.dll 참조 필요
-using ConnectInfo;            // ConnectInfo.dll( DatabaseInfo ) 참조
+//using MySql.Data.MySqlClient;  // ☒ MySql 드라이버 제거
+using Npgsql;                 // ☑ PostgreSQL 드라이버 추가
+using ConnectInfo;            // DatabaseInfo 참조 (변경 없음)
 using System.Globalization;
 using System.Management;
 
@@ -80,80 +81,82 @@ namespace ITM_Agent.Services
         /// </summary>
         private void UploadAgentInfoToDatabase(string eqpid, string type)
         {
-            // 1) ConnectInfo.dll을 통해 Default DB 정보 가져오기
-            DatabaseInfo dbInfo = DatabaseInfo.CreateDefault();
-            string connectionString = dbInfo.GetConnectionString();
+            /* 0) 연결 문자열 */
+            string connString = DatabaseInfo.CreateDefault().GetConnectionString();
         
-            // 2) 시스템 정보 수집
+            /* 1) 시스템 정보 수집 */
             string osVersion = SystemInfoCollector.GetOSVersion();
             string architecture = SystemInfoCollector.GetArchitecture();
             string machineName = SystemInfoCollector.GetMachineName();
             string locale = SystemInfoCollector.GetLocale();
             string timeZone = SystemInfoCollector.GetTimeZone();
-            string pcNow = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss");
+            //string pcNow = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss");
+            DateTime pcNow = DateTime.Now;    // 그대로 DateTime
             
             try
             {
-                using (MySqlConnection conn = new MySqlConnection(connectionString))
+                using (var conn = new NpgsqlConnection(connString))     // ☑ NpgsqlConnection
                 {
                     conn.Open();
         
-                    // 3) 기존 데이터 존재 여부 확인
-                    string selectQuery = @"
-                        SELECT COUNT(*) FROM itm.agent_info 
-                        WHERE eqpid = @eqpid AND pc_name = @pc_name;
-                    ";
-        
+                    /* 2) 기존 레코드 존재 여부 확인 */
+                    const string SELECT_SQL = @"
+                        SELECT COUNT(*) FROM public.agent_info
+                        WHERE eqpid = @eqpid AND pc_name = @pc_name;";
                     int existingRecords = 0;
-                    using (MySqlCommand selectCmd = new MySqlCommand(selectQuery, conn))
+                    using (var selCmd = new NpgsqlCommand(SELECT_SQL, conn))
                     {
                         selectCmd.Parameters.AddWithValue("@eqpid", eqpid);
                         selectCmd.Parameters.AddWithValue("@pc_name", machineName);
-        
                         existingRecords = Convert.ToInt32(selectCmd.ExecuteScalar());
                     }
-        
-                    // 4) 조건에 따른 처리
+                    
                     if (existingRecords > 0)
                     {
-                        logManager.LogEvent($"[EqpidManager] Entry already exists for Eqpid: {eqpid} and PC Name: {machineName}. Skipping upload.");
+                        logManager.LogEvent(
+                            $"[EqpidManager] Entry already exists for Eqpid: {eqpid} and PC Name: {machineName}. Skipping upload.");
+                        return;
                     }
-                    else
+                    
+                    /* 3) INSERT … ON CONFLICT → UPSERT */
+                    const string insertQuery = @"
+                        INSERT INTO public.agent_info
+                        (eqpid, type, os, system_type, pc_name, locale, timezone, app_ver, reg_date, servtime)
+                        VALUES
+                        (@eqpid, @type, @os, @arch, @pc_name, @loc, @tz, @app_ver, @pc_now::timestamp(0), NOW()::timestamp(0))
+                        ON CONFLICT (eqpid, pc_name)
+                        DO UPDATE SET
+                            type = EXCLUDED.type,
+                            os = EXCLUDED.os,
+                            system_type = EXCLUDED.system_type,
+                            locale = EXCLUDED.locale,
+                            timezone = EXCLUDED.timezone,
+                            app_ver = EXCLUDED.app_ver,
+                            reg_date = EXCLUDED.reg_date,
+                            servtime = NOW();";
+
+                    using (var insCmd = new NpgsqlCommand(INSERT_SQL, conn))
                     {
-                        // 데이터가 없으면 INSERT
-                        string insertQuery = @"
-                            INSERT INTO itm.agent_info
-                            (eqpid, type, os, system_type, pc_name, locale, timezone, app_ver, reg_date, servtime)
-                            VALUES
-                            (@eqpid, @type, @os, @arch, @pc_name, @loc, @tz, @app_ver, @pc_now, NOW())
-                            ON DUPLICATE KEY UPDATE
-                                type = @type,
-                                os = @os,
-                                system_type = @arch,
-                                locale = @loc,
-                                timezone = @tz,
-                                app_ver = @app_ver,
-                                reg_date = @pc_now,
-                                servtime = NOW();
-                        ";
-        
-                        using (MySqlCommand insertCmd = new MySqlCommand(insertQuery, conn))
-                        {
-                            insertCmd.Parameters.AddWithValue("@eqpid", eqpid);
-                            insertCmd.Parameters.AddWithValue("@type", type);
-                            insertCmd.Parameters.AddWithValue("@os", osVersion);
-                            insertCmd.Parameters.AddWithValue("@arch", architecture);
-                            insertCmd.Parameters.AddWithValue("@pc_name", machineName);
-                            insertCmd.Parameters.AddWithValue("@loc", locale);
-                            insertCmd.Parameters.AddWithValue("@tz", timeZone);
-                            insertCmd.Parameters.AddWithValue("@app_ver", appVersion);
-                            insertCmd.Parameters.AddWithValue("@pc_now", pcNow);
-        
-                            int rowsAffected = insertCmd.ExecuteNonQuery();
-                            logManager.LogEvent($"[EqpidManager] DB 업로드 완료. (rows inserted/updated={rowsAffected})");
-                        }
+                        insCmd.Parameters.AddWithValue("@eqpid", eqpid);
+                        insCmd.Parameters.AddWithValue("@type", type);
+                        insCmd.Parameters.AddWithValue("@os", osVersion);
+                        insCmd.Parameters.AddWithValue("@arch", architecture);
+                        insCmd.Parameters.AddWithValue("@pc_name", machineName);
+                        insCmd.Parameters.AddWithValue("@loc", locale);
+                        insCmd.Parameters.AddWithValue("@tz", timeZone);
+                        insCmd.Parameters.AddWithValue("@app_ver", appVersion);
+                        //insCmd.Parameters.AddWithValue("@pc_now", pcNow);
+                        insCmd.Parameters.Add("@pc_now",NpgsqlTypes.NpgsqlDbType.Timestamp).Value = pcNow;
+    
+                        int rows = insCmd.ExecuteNonQuery();
+                        logManager.LogEvent($"[EqpidManager] DB 업로드 완료. (rows inserted/updated={rows})");
                     }
                 }
+            }
+            /* 23505 = unique_violation */
+            catch (PostgresException pex) when (pex.SqlState == "23505")
+            {
+                logManager.LogEvent($"[EqpidManager] Duplicate entry skipped: {pex.Message}");
             }
             catch (Exception ex)
             {
@@ -162,7 +165,7 @@ namespace ITM_Agent.Services
         }
     }
     
-    public class SystemInfoCollector
+    public static class SystemInfoCollector
     {
         public static string GetOSVersion()
         {
@@ -171,9 +174,7 @@ namespace ITM_Agent.Services
                 using (var searcher = new ManagementObjectSearcher("SELECT Caption FROM Win32_OperatingSystem"))
                 {
                     foreach (var obj in searcher.Get())
-                    {
                         return obj["Caption"].ToString();
-                    }
                 }
             }
             catch (Exception ex)
@@ -183,29 +184,13 @@ namespace ITM_Agent.Services
             return "Unknown OS";
         }
     
-        public static string GetArchitecture()
-        {
-            // 64비트 OS 여부 판단
-            return Environment.Is64BitOperatingSystem ? "64-bit" : "32-bit";
-        }
-    
-        public static string GetMachineName()
-        {
-            // 예: "DESKTOP-ABCD123"
-            return Environment.MachineName;
-        }
-    
-        public static string GetLocale()
-        {
-            // 현재 UI 문화권
-            // 예: "ko-KR"
-            return CultureInfo.CurrentUICulture.Name;
-        }
-    
-        public static string GetTimeZone()
-        {
-            // 예: "Korea Standard Time"
-            return TimeZoneInfo.Local.StandardName; 
-        }
+        public static string GetArchitecture() => 
+            Environment.Is64BitOperatingSystem ? "64-bit" : "32-bit";
+
+        public static string GetMachineName() => Environment.MachineName;
+
+        public static string GetLocale() => CultureInfo.CurrentUICulture.Name;
+
+        public static string GetTimeZone() => TimeZoneInfo.Local.StandardName;
     }
 }
