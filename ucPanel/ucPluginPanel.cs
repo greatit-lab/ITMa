@@ -7,6 +7,7 @@ using System.Reflection;
 using System.Windows.Forms;
 using ITM_Agent.Plugins;
 using ITM_Agent.Services;
+using System.Text.RegularExpressions;         // [추가] 플러그인명 정규식 파싱
 
 namespace ITM_Agent.ucPanel
 {
@@ -29,7 +30,16 @@ namespace ITM_Agent.ucPanel
             // settings.ini의 [RegPlugins] 섹션에서 기존에 등록된 플러그인 정보를 불러옴
             LoadPluginsFromSettings();
         }
-
+        
+        private void UpdatePluginListDisplay()
+        {
+            lb_PluginList.Items.Clear();
+            for (int i = 0; i < loadedPlugins.Count; i++)
+            {
+                lb_PluginList.Items.Add($"{i + 1}. {loadedPlugins[i]}");
+            }
+        }
+        
         private void btn_PlugAdd_Click(object sender, EventArgs e)
         {
             /* 1) 파일 선택 대화상자 (전통적 using 블록) */
@@ -98,8 +108,7 @@ namespace ITM_Agent.ucPanel
                     };
                     
                     loadedPlugins.Add(item);
-                    //lb_PluginList.Items.Add(item.PluginName);
-                    lb_PluginList.Items.Add(item.ToString());  // ★ 버전 포함 표시
+                    UpdatePluginListDisplay();            // 번호 재구성
                     SavePluginInfoToSettings(item);
                     logManager.LogEvent($"Plugin registered: {pluginName}");
                     PluginsChanged?.Invoke(this, EventArgs.Empty);     // ✅ 새로 추가
@@ -117,55 +126,64 @@ namespace ITM_Agent.ucPanel
         /// lb_PluginList에서 선택된 플러그인을 삭제 전 확인 메시지를 띄우고,  
         /// loadedPlugins와 lb_PluginList, settings.ini의 [RegPlugins] 섹션, 그리고 Library 폴더의 DLL 파일을 삭제합니다.
         /// </summary>
-        private void btn_PlugRemove_Click(object sender, EventArgs e)
+        private void btn_PlugRemove_Click(object sender, EventArgs e)          // [추가]
         {
             if (lb_PluginList.SelectedItem == null)
             {
-                MessageBox.Show("삭제할 플러그인을 선택하세요.", "알림", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                MessageBox.Show("삭제할 플러그인을 선택하세요.", "알림",
+                                MessageBoxButtons.OK, MessageBoxIcon.Information);
                 return;
             }
 
-            string selectedPluginName = lb_PluginList.SelectedItem.ToString();
-            DialogResult result = MessageBox.Show($"플러그인 '{selectedPluginName}'을(를) 삭제하시겠습니까?", 
-                                                  "삭제 확인", MessageBoxButtons.YesNo, MessageBoxIcon.Warning);
-            if (result == DialogResult.Yes)
+            // 1) ListBox 표시 문자열 → “플러그인명” 추출 ─ 번호와 (v버전) 제거
+            string display = lb_PluginList.SelectedItem.ToString();           // 예) "3. Onto_WaferFlatData (v0.0.0.1)"
+            string pluginName = Regex.Replace(display, @"^\d+\.\s*", "");     // 앞쪽 "3. " 삭제
+            pluginName = Regex.Replace(pluginName, @"\s*\(v.*\)$", "");       // 뒤쪽 "(v…)" 삭제
+            pluginName = pluginName.Trim();
+
+            DialogResult result = MessageBox.Show(
+                $"플러그인 '{pluginName}'을(를) 삭제하시겠습니까?",
+                "삭제 확인", MessageBoxButtons.YesNo, MessageBoxIcon.Warning);
+
+            if (result != DialogResult.Yes) return;
+
+            // 2) loadedPlugins 검색
+            var pluginItem = loadedPlugins
+                             .FirstOrDefault(p => p.PluginName.Equals(pluginName,
+                                                     StringComparison.OrdinalIgnoreCase));
+            if (pluginItem == null)
             {
-                var pluginItem = loadedPlugins.FirstOrDefault(p => p.PluginName.Equals(selectedPluginName, StringComparison.OrdinalIgnoreCase));
-                if (pluginItem != null)
-                {
-                    // Library 폴더의 DLL 파일 삭제 시도
-                    if (File.Exists(pluginItem.AssemblyPath))
-                    {
-                        try
-                        {
-                            File.Delete(pluginItem.AssemblyPath);
-                            logManager.LogEvent($"DLL 파일 삭제됨: {pluginItem.AssemblyPath}");
-
-                            // 삭제 후 파일이 남아있으면(파일 잠김 등) 안내
-                            if (File.Exists(pluginItem.AssemblyPath))
-                            {
-                                MessageBox.Show("DLL 파일이 사용 중이거나 삭제되지 않았습니다. 프로그램을 재시작 후 다시 시도하세요.",
-                                    "파일 삭제 실패", MessageBoxButtons.OK, MessageBoxIcon.Warning);
-                                logManager.LogError("DLL 파일이 삭제되지 않았음(잠김 등): " + pluginItem.AssemblyPath);
-                                return;
-                            }
-                        }
-                        catch (Exception ex)
-                        {
-                            MessageBox.Show("DLL 파일 삭제 중 오류 발생: " + ex.Message, "오류", MessageBoxButtons.OK, MessageBoxIcon.Error);
-                            logManager.LogError("DLL 파일 삭제 중 오류: " + ex.Message);
-                            return;
-                        }
-                    }
-                    loadedPlugins.Remove(pluginItem);
-                }
-                lb_PluginList.Items.Remove(selectedPluginName);
-
-                // settings.ini의 [RegPlugins] 섹션에서 해당 키 제거
-                settingsManager.RemoveKeyFromSection("RegPlugins", selectedPluginName);
-                logManager.LogEvent($"Plugin removed: {selectedPluginName}");
-                PluginsChanged?.Invoke(this, EventArgs.Empty);     // ✅ 새로 추가
+                MessageBox.Show("내부 목록에서 플러그인을 찾을 수 없습니다.", "오류",
+                                MessageBoxButtons.OK, MessageBoxIcon.Error);
+                logManager.LogError($"Remove 실패(목록 없음): {pluginName}");
+                return;
             }
+
+            // 3) DLL 파일 삭제
+            if (File.Exists(pluginItem.AssemblyPath))
+            {
+                try
+                {
+                    File.Delete(pluginItem.AssemblyPath);
+                    logManager.LogEvent($"DLL 삭제됨: {pluginItem.AssemblyPath}");
+                }
+                catch (Exception ex)
+                {
+                    MessageBox.Show("DLL 파일 삭제 중 오류: " + ex.Message, "오류",
+                                    MessageBoxButtons.OK, MessageBoxIcon.Error);
+                    logManager.LogError("DLL 삭제 오류: " + ex.Message);
+                    return;
+                }
+            }
+
+            // 4) 내부 리스트 & INI 제거
+            loadedPlugins.Remove(pluginItem);                                // [수정]
+            settingsManager.RemoveKeyFromSection("RegPlugins", pluginName);  // [수정]
+            logManager.LogEvent($"Plugin removed: {pluginName}");
+
+            // 5) UI 재갱신 (번호 재정렬)
+            UpdatePluginListDisplay();                                       // [추가]
+            PluginsChanged?.Invoke(this, EventArgs.Empty);                   // 필요 시 알림
         }
 
         /// <summary>
@@ -228,14 +246,13 @@ namespace ITM_Agent.ucPanel
                     };
         
                     loadedPlugins.Add(item);                 // 내부 리스트 보존
-                    lb_PluginList.Items.Add(item.ToString()); // "Name (v1.2.3.4)" 형식 표시
-        
-                    logManager.LogEvent($"Plugin auto-loaded: {item.ToString()}");
+                    logManager.LogEvent($"Plugin auto-loaded: {item}");
                 }
                 catch (Exception ex)
                 {
                     logManager.LogError($"플러그인 로드 실패: {ex.Message}");
                 }
+                UpdatePluginListDisplay();
             }
         }
 
@@ -246,5 +263,35 @@ namespace ITM_Agent.ucPanel
         {
             return loadedPlugins;
         }
+        
+        #region ====== Run 상태 동기화 ======   // [추가]
+        
+        /// <summary>
+        /// 각 컨트롤의 Enable 상태를 일괄 변경한다.
+        /// </summary>
+        private void SetControlsEnabled(bool enabled)         // [추가]
+        {
+            btn_PlugAdd.Enabled    = enabled;
+            btn_PlugRemove.Enabled = enabled;
+            lb_PluginList.Enabled  = enabled;
+        }
+        
+        /// <summary>
+        /// MainForm 에서 Run/Stop 전환 시 호출된다.
+        /// </summary>
+        public void UpdateStatusOnRun(bool isRunning)         // [추가]
+        {
+            SetControlsEnabled(!isRunning);
+        }
+        
+        /// <summary>
+        /// 처음 패널을 화면에 띄울 때, 혹은 MainForm 에서 상태를 다시 맞출 때 호출.
+        /// </summary>
+        public void InitializePanel(bool isRunning)           // [추가]
+        {
+            SetControlsEnabled(!isRunning);
+        }
+        
+        #endregion
     }
 }
