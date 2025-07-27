@@ -18,6 +18,7 @@ namespace ITM_Agent.ucPanel
     {
         private readonly ConcurrentQueue<string> uploadQueue = new ConcurrentQueue<string>();
         private readonly CancellationTokenSource ctsUpload = new CancellationTokenSource();
+        private HashSet<string> prevPluginNames;                // [추가]
         
         // 외부에서 주입받는 참조
         private ucConfigurationPanel configPanel;
@@ -62,6 +63,10 @@ namespace ITM_Agent.ucPanel
             LoadTargetFolderItems();
             LoadPluginItems();
         
+            prevPluginNames = new HashSet<string>(
+                pluginPanel.GetLoadedPlugins().Select(p => p.PluginName),
+                StringComparer.OrdinalIgnoreCase);                  // [추가]
+            
             // ⑤ INI 복원
             LoadUploadSettings();
         
@@ -173,10 +178,8 @@ namespace ITM_Agent.ucPanel
         
                 // ③ 폴더가 없으면 생성 (권한 없으면 예외 발생)
                 if (!Directory.Exists(folderPath))
-                {
                     Directory.CreateDirectory(folderPath);
-                }
-        
+
                 // ④ 이전 Watcher 해제
                 uploadFolderWatcher?.Dispose();
         
@@ -205,7 +208,7 @@ namespace ITM_Agent.ucPanel
         
         private void UploadFolderWatcher_Event(object sender, FileSystemEventArgs e)
         {
-            /// 파일 생성 직후 잠금 해제까지 살짝 대기
+            // 파일 생성 직후 잠금 해제까지 살짝 대기
             Thread.Sleep(200);
         
             uploadQueue.Enqueue(e.FullPath);
@@ -438,36 +441,78 @@ namespace ITM_Agent.ucPanel
             RefreshPluginCombo();
         }
         
-        private void RefreshPluginCombo()
+        private void RefreshPluginCombo()                       // [추가]
         {
-            // (1) 현재 선택 상태 보존
-            string prevSelection = cb_FlatPlugin.SelectedItem as string;
+            // 0) 현재 플러그인 이름 수집
+            var current = pluginPanel.GetLoadedPlugins()
+                                     .Select(p => p.PluginName)
+                                     .ToList();
         
-            cb_FlatPlugin.BeginUpdate();
-            cb_FlatPlugin.Items.Clear();
+            // 1) 제거된 플러그인 처리
+            foreach (string removed in prevPluginNames.Except(current, StringComparer.OrdinalIgnoreCase))
+                RemovePluginReferences(removed);
         
-            // (2) 플러그인 이름 다시 채우기
-            foreach (var p in pluginPanel.GetLoadedPlugins())
-                cb_FlatPlugin.Items.Add(p.PluginName);
-        
-            // ▼▼ 기존 코드 : 새 목록의 “마지막 항목”을 강제로 선택 -------------------
-            //if (cb_FlatPlugin.Items.Count > 0)
-            //    cb_FlatPlugin.SelectedIndex = cb_FlatPlugin.Items.Count - 1;
-            // ▲▲ 삭제(주석처리) -----------------------------------------------------
-        
-            // (3) 이전에 선택돼 있던 값이 아직도 존재하면 그대로 유지
-            if (!string.IsNullOrEmpty(prevSelection) &&
-                cb_FlatPlugin.Items.Contains(prevSelection))
+            // 2) 콤보(Flat·PreAlign) 갱신
+            ComboBox[] targets = { cb_FlatPlugin, cb_PreAlignPlugin };
+            foreach (var cb in targets)
             {
-                cb_FlatPlugin.SelectedItem = prevSelection;
-            }
-            else
-            {
-                // 아니면 아무 것도 선택하지 않음
-                cb_FlatPlugin.SelectedIndex = -1;
+                string prev = cb.Text;
+                cb.BeginUpdate();
+                cb.Items.Clear();
+                cb.Items.AddRange(current.ToArray());
+                cb.SelectedItem = current.Contains(prev) ? (object)prev : null;
+                cb.EndUpdate();
             }
         
-            cb_FlatPlugin.EndUpdate();
+            // 3) 캐시 갱신
+            prevPluginNames = new HashSet<string>(current, StringComparer.OrdinalIgnoreCase);
+        }
+        
+        // [5] 헬퍼 --- 플러그인 제거 후 Upload 설정 UI Watcher 정리
+        private void RemovePluginReferences(string pluginName)
+        {
+            /* ── 1) Wafer-Flat ─────────────────────────────────────────── */
+            if (cb_FlatPlugin.Items.Contains(pluginName))
+                cb_FlatPlugin.Items.Remove(pluginName);                        // [수정]
+        
+            if (string.Equals(cb_FlatPlugin.Text, pluginName, StringComparison.OrdinalIgnoreCase))
+            {
+                /* ① UI 초기화 */
+                cb_FlatPlugin.SelectedIndex  = -1;                             // [추가]
+                cb_FlatPlugin.Text           = string.Empty;                   // [추가]
+                cb_WaferFlat_Path.SelectedIndex = -1;                          // [추가]
+                cb_WaferFlat_Path.Text       = string.Empty;                   // [추가]
+        
+                /* ② 폴더 감시 중단 */
+                if (uploadFolderWatcher != null)
+                {
+                    uploadFolderWatcher.EnableRaisingEvents = false;
+                    uploadFolderWatcher.Dispose();
+                    uploadFolderWatcher = null;                                // [수정]
+                }
+        
+                /* ③ INI Key 삭제 */
+                settingsManager.RemoveKeyFromSection(UploadSection, UploadKey_WaferFlat); // [수정]
+                logManager.LogEvent("[ucUploadPanel] Wafer-Flat 설정 초기화(플러그인 삭제)"); // [추가]
+            }
+        
+            /* ── 2) Pre-Align ──────────────────────────────────────────── */
+            if (cb_PreAlignPlugin.Items.Contains(pluginName))
+                cb_PreAlignPlugin.Items.Remove(pluginName);                    // [수정]
+        
+            if (string.Equals(cb_PreAlignPlugin.Text, pluginName, StringComparison.OrdinalIgnoreCase))
+            {
+                cb_PreAlignPlugin.SelectedIndex = -1;                          // [추가]
+                cb_PreAlignPlugin.Text          = string.Empty;                // [추가]
+                cb_PreAlign_Path.SelectedIndex  = -1;                          // [추가]
+                cb_PreAlign_Path.Text           = string.Empty;                // [추가]
+        
+                preAlignFolderWatcher?.Dispose();
+                preAlignFolderWatcher = null;                                  // [추가]
+        
+                settingsManager.RemoveKeyFromSection(UploadSection, UploadKey_PreAlign);  // [수정]
+                logManager.LogEvent("[ucUploadPanel] Pre-Align 설정 초기화(플러그인 삭제)"); // [추가]
+            }
         }
         
         private async Task ConsumeUploadQueueAsync(CancellationToken token)
