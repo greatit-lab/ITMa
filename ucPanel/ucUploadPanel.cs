@@ -19,7 +19,7 @@ namespace ITM_Agent.ucPanel
         private readonly ConcurrentQueue<string> uploadQueue = new ConcurrentQueue<string>();
         private readonly CancellationTokenSource ctsUpload = new CancellationTokenSource();
         private HashSet<string> prevPluginNames;                // [추가]
-        
+
         // 외부에서 주입받는 참조
         private ucConfigurationPanel configPanel;
         private ucPluginPanel pluginPanel;
@@ -31,9 +31,9 @@ namespace ITM_Agent.ucPanel
         private FileSystemWatcher uploadFolderWatcher;
         private FileSystemWatcher preAlignFolderWatcher;    // Pre-Align 폴더 감시용
 
-        private const string UploadSection       = "UploadSetting"; // 공통 섹션
+        private const string UploadSection = "UploadSetting"; // 공통 섹션
         private const string UploadKey_WaferFlat = "WaferFlat";     // Wafer-Flat 전용 Key
-        private const string UploadKey_PreAlign  = "PreAlign";      // Pre-Align 전용 Key
+        private const string UploadKey_PreAlign = "PreAlign";      // Pre-Align 전용 Key
         private const string KeyFolder = "WaferFlatFolder";  // 폴더 키
         private const string KeyPlugin = "FilePlugin";  // 플러그인 키
         
@@ -90,7 +90,7 @@ namespace ITM_Agent.ucPanel
                 RestoreUploadSetting("WaferFlat", flatLine);
         
             // 2) Pre-Align -----------------------------------------------------
-            string preLine  = settingsManager.GetValueFromSection(UploadSection, UploadKey_PreAlign);
+            string preLine = settingsManager.GetValueFromSection(UploadSection, UploadKey_PreAlign);
             if (!string.IsNullOrWhiteSpace(preLine))
                 RestoreUploadSetting("PreAlign", preLine);
         }
@@ -171,26 +171,26 @@ namespace ITM_Agent.ucPanel
             }
         }
         
-        // > 수정 전체 메서드 (원본은 주석 처리, 아래에 개선 코드 전체 제공)
+        // ▶ 수정 전체 메서드 (원본은 주석 처리, 아래에 개선 코드 전체 제공)
         private void StartUploadFolderWatcher(string folderPath)
         {
             try
             {
-                // ① 경로 문자열 정리(개행·앞뒤 공백 제거)
+                // ① 경로 문자열 정리
                 folderPath = folderPath.Trim();
         
                 // ② 유효성 검사
                 if (string.IsNullOrEmpty(folderPath))
                     throw new ArgumentException("폴더 경로가 비어 있습니다.", nameof(folderPath));
         
-                // ③ 폴더가 없으면 생성 (권한 없으면 예외 발생)
+                // ③ 폴더 없으면 생성
                 if (!Directory.Exists(folderPath))
                     Directory.CreateDirectory(folderPath);
 
-                // ④ 이전 Watcher 해제
+                // ④ 기존 Watcher 해제
                 uploadFolderWatcher?.Dispose();
         
-                // ⑤ 새로운 Watcher 생성
+                // ⑤ 새 Watcher 생성
                 uploadFolderWatcher = new FileSystemWatcher(folderPath)
                 {
                     Filter = "*.*",
@@ -198,7 +198,7 @@ namespace ITM_Agent.ucPanel
                     NotifyFilter = NotifyFilters.FileName
                                             | NotifyFilters.Size
                                             | NotifyFilters.LastWrite,
-                    EnableRaisingEvents   = true
+                    EnableRaisingEvents = true
                 };
                 uploadFolderWatcher.Created += UploadFolderWatcher_Event;
         
@@ -257,7 +257,7 @@ namespace ITM_Agent.ucPanel
             {
                 /* 4) DLL 메모리 로드(잠금 방지) */
                 byte[] dllBytes = File.ReadAllBytes(item.AssemblyPath);
-                Assembly asm    = Assembly.Load(dllBytes);
+                Assembly asm = Assembly.Load(dllBytes);
         
                 /* 5) ‘ProcessAndUpload’ 메서드를 가진 첫 번째 public 클래스 탐색 */
                 Type targetType = asm.GetTypes()
@@ -318,57 +318,41 @@ namespace ITM_Agent.ucPanel
             }
         }
         
-        /*──────────────────────────────────────────────────────────┐
-        │ 경로 정규화: GetFullPath → 끝 \ 제거 → 소문자             │
-        └──────────────────────────────────────────────────────────*/
         private static string NormalizePath(string path)
         {
             if (string.IsNullOrWhiteSpace(path)) return string.Empty;
-            string full = Path.GetFullPath(path)
-                               .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
-            return full.ToLowerInvariant();                            // [수정] 대문자 → 소문자
+            // 전체 경로화 + 끝의 ￦ 제거 + 대문자 변환 (케이스 무시용)
+            string full = Path.GetFullPath(path).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+            return full.ToUpperInvariant();
         }
 
-        /*──────────────────────────────────────────────────────────┐
-        │ 중복 검사 후 콤보박스에 추가                               │
-        └──────────────────────────────────────────────────────────*/
-        private bool AddPathToCombo(ComboBox combo, string rawPath)
+        private void AddPathToCombo(ComboBox combo, string rawPath)
         {
-            if (string.IsNullOrWhiteSpace(rawPath) || !Directory.Exists(rawPath))
-            {
-                MessageBox.Show("유효한 폴더를 선택하세요.", "경고",
-                                MessageBoxButtons.OK, MessageBoxIcon.Warning);
-                return false;
-            }
+            if (string.IsNullOrWhiteSpace(rawPath)) return;
 
             string normNew = NormalizePath(rawPath);
             bool exists = combo.Items.Cast<string>()
                                    .Any(p => NormalizePath(p) == normNew);
-            if (!exists) combo.Items.Add(normNew);        // [수정] 저장·표시 모두 정규화 경로 사용
+            if (!exists)
+                combo.Items.Add(rawPath);         // 원본 경로 그대로 표시
 
+            // 같은 경로(대소문자 ￦￦ 차이 무시) 선택
             combo.SelectedItem = combo.Items.Cast<string>()
                                            .First(p => NormalizePath(p) == normNew);
-            return true;
         }
 
-        /*──────────────────────────────────────────────────────────┐
-        │ 콤보박스 중복 항목 정리                                   │
-        └──────────────────────────────────────────────────────────*/
         private void DeduplicateComboItems(ComboBox combo)
         {
             var uniques = combo.Items
                                 .Cast<string>()
                                 .GroupBy(NormalizePath)
                                 .Select(g => g.First())
-                                .ToArray();
+                                .ToList();
             combo.Items.Clear();
-            combo.Items.AddRange(uniques);
+            combo.Items.AddRange(uniques.ToArray());
         }
 
-        /*──────────────────────────────────────────────────────────┐
-        │ 폼 로드 완료 후 콤보박스 중복 제거                           │
-        └──────────────────────────────────────────────────────────*/
-        private void UcUploadPanel_Load(object sender, EventArgs e)         // [추가]
+        private void UcUploadPanel_Load(object sender, EventArgs e)
         {
             DeduplicateComboItems(cb_WaferFlat_Path);
             DeduplicateComboItems(cb_PreAlign_Path);
@@ -394,13 +378,13 @@ namespace ITM_Agent.ucPanel
             }
         
             string normalizedFolder = NormalizePath(rawFolder);   // 중복 변수 제거
-            string pluginName       = rawPlugin;                  // 누락 보완
+            string pluginName = rawPlugin;                  // 누락 보완
         
             string iniValue = $"Folder : {normalizedFolder}, Plugin : {pluginName}";
             settingsManager.SetValueToSection(UploadSection, UploadKey_WaferFlat, iniValue);
         
             AddPathToCombo(cb_WaferFlat_Path, rawFolder);
-            AddPathToCombo(cb_FlatPlugin,     pluginName);
+            AddPathToCombo(cb_FlatPlugin, pluginName);
             DeduplicateComboItems(cb_WaferFlat_Path);
         
             logManager.LogEvent($"[ucUploadPanel] 저장(WaferFlat) ➜ {iniValue}");
@@ -414,9 +398,9 @@ namespace ITM_Agent.ucPanel
         {
             // ① UI 초기화
             cb_WaferFlat_Path.SelectedIndex = -1;
-            cb_WaferFlat_Path.Text          = string.Empty;
-            cb_FlatPlugin.SelectedIndex     = -1;
-            cb_FlatPlugin.Text              = string.Empty;
+            cb_WaferFlat_Path.Text = string.Empty;
+            cb_FlatPlugin.SelectedIndex = -1;
+            cb_FlatPlugin.Text = string.Empty;
         
             // ② 감시 중단
             if (uploadFolderWatcher != null)
@@ -545,10 +529,10 @@ namespace ITM_Agent.ucPanel
         private void RemovePluginReferences(string pluginName)
         {
             /* 0) 현재 선택 여부를 먼저 파악해 예외를 예방한다. */               // [추가]
-            bool isFlatSelected     = string.Equals(cb_FlatPlugin.Text,
+            bool isFlatSelected = string.Equals(cb_FlatPlugin.Text,
                                                     pluginName,
                                                     StringComparison.OrdinalIgnoreCase); // [추가]
-            bool isPreSelected      = string.Equals(cb_PreAlignPlugin.Text,
+            bool isPreSelected = string.Equals(cb_PreAlignPlugin.Text,
                                                     pluginName,
                                                     StringComparison.OrdinalIgnoreCase); // [추가]
         
@@ -559,10 +543,10 @@ namespace ITM_Agent.ucPanel
             if (isFlatSelected)                                                      // [수정]
             {
                 /* ① UI 초기화 */
-                cb_FlatPlugin.SelectedIndex  = -1;                                   // [추가]
-                cb_FlatPlugin.Text           = string.Empty;                         // [추가]
+                cb_FlatPlugin.SelectedIndex = -1;                                   // [추가]
+                cb_FlatPlugin.Text = string.Empty;                         // [추가]
                 cb_WaferFlat_Path.SelectedIndex = -1;                                // [추가]
-                cb_WaferFlat_Path.Text       = string.Empty;                         // [추가]
+                cb_WaferFlat_Path.Text = string.Empty;                         // [추가]
         
                 /* ② 폴더 감시 중단 */
                 uploadFolderWatcher?.Dispose();                                      // [수정]
@@ -580,9 +564,9 @@ namespace ITM_Agent.ucPanel
             if (isPreSelected)                                                       // [수정]
             {
                 cb_PreAlignPlugin.SelectedIndex = -1;                                // [추가]
-                cb_PreAlignPlugin.Text          = string.Empty;                      // [추가]
-                cb_PreAlign_Path.SelectedIndex  = -1;                                // [추가]
-                cb_PreAlign_Path.Text           = string.Empty;                      // [추가]
+                cb_PreAlignPlugin.Text = string.Empty;                      // [추가]
+                cb_PreAlign_Path.SelectedIndex = -1;                                // [추가]
+                cb_PreAlign_Path.Text = string.Empty;                      // [추가]
         
                 preAlignFolderWatcher?.Dispose();                                    // [수정]
                 preAlignFolderWatcher = null;                                        // [추가]
@@ -666,7 +650,7 @@ namespace ITM_Agent.ucPanel
             {
                 /* (1) DLL을 메모리로만 로드해 파일 잠금 방지 */
                 byte[] dllBytes = File.ReadAllBytes(dllPath);
-                Assembly asm    = Assembly.Load(dllBytes);
+                Assembly asm = Assembly.Load(dllBytes);
         
                 /* (2) ‘ProcessAndUpload’ 메서드를 가진 타입 검색 */
                 Type targetType = asm.GetTypes()
@@ -771,12 +755,12 @@ namespace ITM_Agent.ucPanel
             }
         
             string normalizedFolder = NormalizePath(rawFolder);
-            string pluginName       = rawPlugin;
+            string pluginName = rawPlugin;
         
             string iniValue = $"Folder : {normalizedFolder}, Plugin : {pluginName}";
             settingsManager.SetValueToSection(UploadSection, UploadKey_PreAlign, iniValue);
         
-            AddPathToCombo(cb_PreAlign_Path,  rawFolder);
+            AddPathToCombo(cb_PreAlign_Path, rawFolder);
             AddPathToCombo(cb_PreAlignPlugin, pluginName);
             DeduplicateComboItems(cb_PreAlign_Path);
         
@@ -790,10 +774,10 @@ namespace ITM_Agent.ucPanel
         /* ===== 개선된 전체 btn_PreAlignClear_Click ===== */
         private void btn_PreAlignClear_Click(object sender, EventArgs e)
         {
-            cb_PreAlign_Path.SelectedIndex  = -1;
-            cb_PreAlign_Path.Text           = string.Empty;
+            cb_PreAlign_Path.SelectedIndex = -1;
+            cb_PreAlign_Path.Text = string.Empty;
             cb_PreAlignPlugin.SelectedIndex = -1;
-            cb_PreAlignPlugin.Text          = string.Empty;
+            cb_PreAlignPlugin.Text = string.Empty;
         
             preAlignFolderWatcher?.Dispose();
             preAlignFolderWatcher = null;
@@ -879,7 +863,7 @@ namespace ITM_Agent.ucPanel
             try
             {
                 byte[] dllBytes = File.ReadAllBytes(item.AssemblyPath);
-                Assembly asm    = Assembly.Load(dllBytes);
+                Assembly asm = Assembly.Load(dllBytes);
         
                 Type targetType = asm.GetTypes()
                     .FirstOrDefault(t => t.IsClass && !t.IsAbstract &&
