@@ -403,8 +403,12 @@ namespace ITM_Agent.ucPanel
         {
             cb_TargetImageFolder.Items.Clear();
             var regexFolders = configPanel.GetRegexList();
-            cb_TargetImageFolder.Items.AddRange(regexFolders.ToArray());
-
+            var uniqueFolders = regexFolders
+                .Distinct(StringComparer.OrdinalIgnoreCase)       // [추가]
+                .ToArray();
+        
+            cb_TargetImageFolder.Items.AddRange(uniqueFolders);   // [수정]
+            
             string selectedPath = settingsManager.GetValueFromSection("ImageTrans", "Target");
             if (!string.IsNullOrEmpty(selectedPath) && cb_TargetImageFolder.Items.Contains(selectedPath))
             {
@@ -415,7 +419,7 @@ namespace ITM_Agent.ucPanel
                 cb_TargetImageFolder.SelectedIndex = -1;
             }
             logManager.LogEvent("[ucImageTransPanel] Regex folder paths loaded");
-        }
+        }  // LoadRegexFolderPaths() 끝
 
         private void LoadFolders()
         {
