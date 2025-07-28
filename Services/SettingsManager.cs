@@ -268,42 +268,37 @@ namespace ITM_Agent.Services
             File.WriteAllLines(settingsFilePath, lines);
         }
 
-        /// <summary>
-        /// Regex 리스트를 설정하는 메서드.
-        /// 주어진 Dictionary<string,string>를 [Regex] 섹션에 재작성.
-        /// </summary>
         public void SetRegexList(Dictionary<string, string> regexDict)
         {
-            var lines = File.Exists(settingsFilePath) ? File.ReadAllLines(settingsFilePath).ToList() : new List<string>();
-
-            // [Regex] 섹션 초기화
+            var lines = File.Exists(settingsFilePath)
+                ? File.ReadAllLines(settingsFilePath).ToList()
+                : new List<string>();
+        
+            // ① 기존 [Regex] 섹션 삭제
             int sectionIndex = lines.FindIndex(l => l.Trim() == "[Regex]");
             if (sectionIndex != -1)
             {
-                int endIndex = lines.FindIndex(sectionIndex + 1, line => line.StartsWith("[") || string.IsNullOrWhiteSpace(line));
+                int endIndex = lines.FindIndex(sectionIndex + 1,
+                    line => line.StartsWith("[") || string.IsNullOrWhiteSpace(line));
                 if (endIndex == -1) endIndex = lines.Count;
                 lines.RemoveRange(sectionIndex, endIndex - sectionIndex);
             }
-
-            // [Regex] 섹션 새로 추가
+        
+            // ② 새 [Regex] 섹션 작성
             if (lines.Count > 0 && !string.IsNullOrWhiteSpace(lines.Last()))
-            {
                 lines.Add("");
-            }
-
+        
             lines.Add("[Regex]");
             foreach (var kvp in regexDict)
-            {
                 lines.Add($"{kvp.Key} -> {kvp.Value}");
-            }
             lines.Add("");
-
+        
+            // ③ **한 번만 저장**  // [수정]
             File.WriteAllLines(settingsFilePath, lines);
-
-            // 기존 설정 파일 갱신 로직
-            File.WriteAllLines(settingsFilePath, ConvertRegexListToLines(regexDict));
-
-            // 변경 알림 이벤트 호출
+        
+            // File.WriteAllLines(settingsFilePath, ConvertRegexListToLines(regexDict)); // [삭제]
+        
+            // ④ 변경 알림
             NotifyRegexSettingsUpdated();
         }
 
