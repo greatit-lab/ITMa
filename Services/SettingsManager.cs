@@ -18,6 +18,7 @@ namespace ITM_Agent.Services
         public event Action RegexSettingsUpdated;
 
         private bool isDebugMode; // DebugMode 상태 저장
+        private bool isPerformanceLogging;    // [추가] 성능 로깅
 
         public SettingsManager(string settingsFilePath)
         {
@@ -38,6 +39,16 @@ namespace ITM_Agent.Services
             {
                 isDebugMode = value;
                 // 필요시 설정 파일에 저장하거나 관련 작업 수행 가능
+            }
+        }
+
+        public bool IsPerformanceLogging
+        {
+            get => isPerformanceLogging;
+            set
+            {
+                isPerformanceLogging = value;
+                /* 필요시 Settings.ini 저장 로직 구현 */
             }
         }
 
