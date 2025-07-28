@@ -241,14 +241,18 @@ namespace ITM_Agent.ucPanel
             }
 
             cb_BaseDatePath.Items.Clear();
-            var regexList = settingsManager.GetRegexList();
-            var folderPaths = regexList.Values.ToList();
-            cb_BaseDatePath.Items.AddRange(folderPaths.ToArray());
+            var folderPaths = settingsManager
+                .GetRegexList()
+                .Values
+                .Distinct(StringComparer.OrdinalIgnoreCase)        // [추가] 중복 제거
+                .ToArray();
+        
+            cb_BaseDatePath.Items.AddRange(folderPaths);          // [수정]
             cb_BaseDatePath.SelectedIndex = -1; // 초기화
 
             // Event Log 예시
             logManager.LogEvent("[ucOverrideNamesPanel] 정규식 경로 목록 로드 완료");
-        }
+        }  // LoadRegexFolderPaths() 끝
 
         private void LoadSelectedBaseDatePath()
         {
