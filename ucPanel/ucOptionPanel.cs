@@ -27,6 +27,9 @@ namespace ITM_Agent.ucPanel
 
             // Settings.ini 값으로 체크 초기화
             chk_DebugMode.Checked = settingsManager.IsDebugMode;
+            
+            chk_PerfoMode.Checked = false;       // Settings.ini 연동 예정
+            chk_PerfoMode.CheckedChanged += chk_PerfoMode_CheckedChanged;   // [추가]
         }
 
         /// <summary>
@@ -44,6 +47,17 @@ namespace ITM_Agent.ucPanel
 
             // ③ MainForm 알림
             DebugModeChanged?.Invoke(isDebug);
+        }
+        
+        private void chk_PerfoMode_CheckedChanged(object sender, EventArgs e)
+        {
+            bool enable = chk_PerfoMode.Checked;
+        
+            /* 샘플링은 항상 필요하므로 Start() */
+            PerformanceMonitor.Instance.Start();             // [수정]
+            PerformanceMonitor.Instance.SetFileLogging(enable); // [수정]
+        
+            settingsManager.IsPerformanceLogging = enable;
         }
     }
 }
