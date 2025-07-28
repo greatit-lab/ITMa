@@ -471,46 +471,50 @@ namespace ITM_Agent.ucPanel
         // [5] 헬퍼 --- 플러그인 제거 후 Upload 설정 UI Watcher 정리
         private void RemovePluginReferences(string pluginName)
         {
-            /* ── 1) Wafer-Flat ─────────────────────────────────────────── */
-            if (cb_FlatPlugin.Items.Contains(pluginName))
-                cb_FlatPlugin.Items.Remove(pluginName);                        // [수정]
+            /* 0) 현재 선택 여부를 먼저 파악해 예외를 예방한다. */               // [추가]
+            bool isFlatSelected     = string.Equals(cb_FlatPlugin.Text,
+                                                    pluginName,
+                                                    StringComparison.OrdinalIgnoreCase); // [추가]
+            bool isPreSelected      = string.Equals(cb_PreAlignPlugin.Text,
+                                                    pluginName,
+                                                    StringComparison.OrdinalIgnoreCase); // [추가]
         
-            if (string.Equals(cb_FlatPlugin.Text, pluginName, StringComparison.OrdinalIgnoreCase))
+            /* ── 1) Wafer-Flat ───────────────────────────────────────── */
+            if (cb_FlatPlugin.Items.Contains(pluginName))
+                cb_FlatPlugin.Items.Remove(pluginName);                              // [수정]
+        
+            if (isFlatSelected)                                                      // [수정]
             {
                 /* ① UI 초기화 */
-                cb_FlatPlugin.SelectedIndex  = -1;                             // [추가]
-                cb_FlatPlugin.Text           = string.Empty;                   // [추가]
-                cb_WaferFlat_Path.SelectedIndex = -1;                          // [추가]
-                cb_WaferFlat_Path.Text       = string.Empty;                   // [추가]
+                cb_FlatPlugin.SelectedIndex  = -1;                                   // [추가]
+                cb_FlatPlugin.Text           = string.Empty;                         // [추가]
+                cb_WaferFlat_Path.SelectedIndex = -1;                                // [추가]
+                cb_WaferFlat_Path.Text       = string.Empty;                         // [추가]
         
                 /* ② 폴더 감시 중단 */
-                if (uploadFolderWatcher != null)
-                {
-                    uploadFolderWatcher.EnableRaisingEvents = false;
-                    uploadFolderWatcher.Dispose();
-                    uploadFolderWatcher = null;                                // [수정]
-                }
+                uploadFolderWatcher?.Dispose();                                      // [수정]
+                uploadFolderWatcher = null;                                          // [수정]
         
                 /* ③ INI Key 삭제 */
                 settingsManager.RemoveKeyFromSection(UploadSection, UploadKey_WaferFlat); // [수정]
                 logManager.LogEvent("[ucUploadPanel] Wafer-Flat 설정 초기화(플러그인 삭제)"); // [추가]
             }
         
-            /* ── 2) Pre-Align ──────────────────────────────────────────── */
+            /* ── 2) Pre-Align ───────────────────────────────────────── */
             if (cb_PreAlignPlugin.Items.Contains(pluginName))
-                cb_PreAlignPlugin.Items.Remove(pluginName);                    // [수정]
+                cb_PreAlignPlugin.Items.Remove(pluginName);                          // [수정]
         
-            if (string.Equals(cb_PreAlignPlugin.Text, pluginName, StringComparison.OrdinalIgnoreCase))
+            if (isPreSelected)                                                       // [수정]
             {
-                cb_PreAlignPlugin.SelectedIndex = -1;                          // [추가]
-                cb_PreAlignPlugin.Text          = string.Empty;                // [추가]
-                cb_PreAlign_Path.SelectedIndex  = -1;                          // [추가]
-                cb_PreAlign_Path.Text           = string.Empty;                // [추가]
+                cb_PreAlignPlugin.SelectedIndex = -1;                                // [추가]
+                cb_PreAlignPlugin.Text          = string.Empty;                      // [추가]
+                cb_PreAlign_Path.SelectedIndex  = -1;                                // [추가]
+                cb_PreAlign_Path.Text           = string.Empty;                      // [추가]
         
-                preAlignFolderWatcher?.Dispose();
-                preAlignFolderWatcher = null;                                  // [추가]
+                preAlignFolderWatcher?.Dispose();                                    // [수정]
+                preAlignFolderWatcher = null;                                        // [추가]
         
-                settingsManager.RemoveKeyFromSection(UploadSection, UploadKey_PreAlign);  // [수정]
+                settingsManager.RemoveKeyFromSection(UploadSection, UploadKey_PreAlign); // [수정]
                 logManager.LogEvent("[ucUploadPanel] Pre-Align 설정 초기화(플러그인 삭제)"); // [추가]
             }
         }
