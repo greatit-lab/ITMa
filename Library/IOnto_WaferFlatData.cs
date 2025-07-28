@@ -252,8 +252,8 @@ namespace Onto_WaferFlatDataLib
                 /* ④ 기타 단위·불필요 어구 제거 */
                 h = h.Replace("(mm)", "")
                      .Replace("(탆)", "")
-                     .Replace("die x", "die_x")
-                     .Replace("die y", "die_y")
+                     .Replace("die x", "diex")
+                     .Replace("die y", "diey")
                      .Trim();
             
                 /* ⑤ 공백 → _ , 특수문자 삭제 */
