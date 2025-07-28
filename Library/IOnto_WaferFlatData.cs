@@ -237,26 +237,30 @@ namespace Onto_WaferFlatDataLib
             }
         
             /* ---------- 2-1) 헤더 정규화 함수 ---------- */
-            string NormalizeHeader(string h)                                           // [추가]
+            string NormalizeHeader(string h)
             {
-                h = h.ToLowerInvariant();                                              // ① 전부 소문자
-        
-                /* (no cal) / (cal) → _no_cal / _cal */
-                h = Regex.Replace(h, @"\(\s*no\s*cal\.?\s*\)", "_no_cal", RegexOptions.IgnoreCase);
-                h = Regex.Replace(h, @"\(\s*cal\.?\s*\)",     "_cal",     RegexOptions.IgnoreCase);
-        
-                /* 기타 치환 */
+                /* ① 일괄 소문자화 */
+                h = h.ToLowerInvariant();
+            
+                /* ② (no cal), no cal, no_cal  →  nocal   // [추가] */
+                h = Regex.Replace(h, @"\(\s*no\s*cal\.?\s*\)", " nocal ", RegexOptions.IgnoreCase);
+                h = Regex.Replace(h, @"\bno[\s_]*cal\b",          "nocal", RegexOptions.IgnoreCase);
+            
+                /* ③ (cal) → cal (후속 언더바 처리로 ‘_cal’ 유지) */
+                h = Regex.Replace(h, @"\(\s*cal\.?\s*\)", " cal ", RegexOptions.IgnoreCase);
+            
+                /* ④ 기타 단위·불필요 어구 제거 */
                 h = h.Replace("(mm)", "")
                      .Replace("(탆)", "")
                      .Replace("die x", "die_x")
                      .Replace("die y", "die_y")
                      .Trim();
-        
-                /* 공백·특수문자 정리 */
-                h = Regex.Replace(h, @"\s+", "_");   // 공백 → _
-                h = Regex.Replace(h, @"[#/:\-]", ""); // 특수문자 제거
-        
-                return h;                            // 예) cu_ht_no_cal, point …
+            
+                /* ⑤ 공백 → _ , 특수문자 삭제 */
+                h = Regex.Replace(h, @"\s+", "_");
+                h = Regex.Replace(h, @"[#/:\-]", "");
+            
+                return h;                  // 예) cu_ht_nocal, point, die_x …
             }
         
             /* ---------- 2-2) 헤더 리스트 & 매핑 사전 ---------- */
