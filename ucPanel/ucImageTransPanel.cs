@@ -268,17 +268,21 @@ namespace ITM_Agent.ucPanel
         }
         #endregion
 
+        /// <summary>
+        /// 동일 BaseName(…_1, …_2 …) 으로 끝나는 이미지 묶음을 PDF 로 병합
+        /// </summary>
         private void MergeImagesForBaseName(string filePath)
         {
-            // 0) baseName 파싱 (파일이 이미 삭제돼도 이름만으로 가능)
+            // 0) baseName 파싱 (이미 삭제된 파일이어도 이름만으로 가능)
             string fnNoExt = Path.GetFileNameWithoutExtension(filePath);
             var m0 = Regex.Match(fnNoExt, @"^(?<base>.+)_(?<page>\d+)$");
-            if (!m0.Success) return;                        // 패턴 미일치 → 무시
+            if (!m0.Success) return;                 // 패턴 미일치 → 무시
         
-            string baseName = m0.Groups["base"].Value;      // 예: ABC
-            string folder   = Path.GetDirectoryName(filePath);
+            string baseName      = m0.Groups["base"].Value;   // 예) 20250728_…_CELL       /* 기존 */
+            string safeBaseName  = baseName.Replace('.', '_'); // [추가] 파일명에 포함된 ‘.’ → ‘_’ 치환
+            string folder        = Path.GetDirectoryName(filePath);
         
-            // 0-1) 이미 병합된 baseName이면 SKIP
+            // 0-1) 이미 병합된 baseName 은 SKIP
             lock (mergedBaseNames)
             {
                 if (mergedBaseNames.Contains(baseName))
@@ -290,7 +294,7 @@ namespace ITM_Agent.ucPanel
                 mergedBaseNames.Add(baseName);
             }
         
-            // 1) 병합 대상 이미지 수집 (존재 파일만)
+            // 1) 병합 대상 이미지 수집
             string[] exts = { ".jpg", ".jpeg", ".png", ".tif", ".tiff" };
             var imgList = Directory.GetFiles(folder, "*.*", SearchOption.TopDirectoryOnly)
                                    .Where(p => exts.Contains(Path.GetExtension(p).ToLower()))
@@ -310,23 +314,24 @@ namespace ITM_Agent.ucPanel
             if (imgList.Count == 0)
             {
                 if (settingsManager.IsDebugMode)
-                    logManager.LogDebug($"[ucImageTransPanel] No images found for base '{baseName}' (이미 삭제되었을 수 있음).");
-                return;                                     // 이미지가 전부 삭제된 경우에도 Error 로그 남기지 않음
+                    logManager.LogDebug($"[ucImageTransPanel] No images found for base '{baseName}'.");
+                return;
             }
         
-            // 2) PDF 출력 경로 확인
+            // 2) PDF 출력 폴더 결정
             string outputFolder = settingsManager.GetValueFromSection("ImageTrans", "SaveFolder");
             if (string.IsNullOrEmpty(outputFolder) || !Directory.Exists(outputFolder))
             {
-                logManager.LogError("[ucImageTransPanel] Invalid output folder - cannot create PDF");
-                return;
+                outputFolder = folder;  // [수정] 설정이 없거나 존재하지 않으면 이미지 폴더 사용
+                logManager.LogEvent("[ucImageTransPanel] SaveFolder 미설정/미존재 ▶ 이미지 폴더로 대체 저장");
             }
-            string outputPdfPath = Path.Combine(outputFolder, $"{baseName}.pdf");
+        
+            string outputPdfPath = Path.Combine(outputFolder, $"{safeBaseName}.pdf"); // [수정] safeBaseName 사용
         
             // 3) PDF 병합 실행 (MergeImagesToPdf 내부에서 이미지 삭제)
             pdfMergeManager.MergeImagesToPdf(imgList, outputPdfPath);
         
-            logManager.LogEvent($"[ucImageTransPanel] Created PDF for baseName '{baseName}': {outputPdfPath}");
+            logManager.LogEvent($"[ucImageTransPanel] Created PDF: {outputPdfPath}");
         }
 
         #region ====== 기존 UI/설정 메서드 ======
