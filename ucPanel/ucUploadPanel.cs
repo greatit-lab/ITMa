@@ -58,6 +58,13 @@ namespace ITM_Agent.ucPanel
         
             btn_PreAlignSet.Click += btn_PreAlignSet_Click;   // ★ 추가
             btn_PreAlignClear.Click += btn_PreAlignClear_Click; // ★ 추가
+            
+            /* ▣ 폼 Load 시 기존 항목 중복 제거 */
+            this.Load += UcUploadPanel_Load;
+
+            // [추가] 프로그램 시작 시 콤보박스 중복 제거
+            DeduplicateComboItems(cb_WaferFlat_Path);
+            DeduplicateComboItems(cb_PreAlign_Path);
         
             // ④ UI 로드
             LoadTargetFolderItems();
@@ -311,30 +318,96 @@ namespace ITM_Agent.ucPanel
             }
         }
         
-        // btn_FlatSet 클릭 시: 선택된 폴더와 플러그인 정보를 Settings.ini에 저장하고 감시 시작
+        /*──────────────────────────────────────────────────────────┐
+        │ 경로 정규화: GetFullPath → 끝 \ 제거 → 소문자             │
+        └──────────────────────────────────────────────────────────*/
+        private static string NormalizePath(string path)
+        {
+            if (string.IsNullOrWhiteSpace(path)) return string.Empty;
+            string full = Path.GetFullPath(path)
+                               .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+            return full.ToLowerInvariant();                            // [수정] 대문자 → 소문자
+        }
+
+        /*──────────────────────────────────────────────────────────┐
+        │ 중복 검사 후 콤보박스에 추가                               │
+        └──────────────────────────────────────────────────────────*/
+        private bool AddPathToCombo(ComboBox combo, string rawPath)
+        {
+            if (string.IsNullOrWhiteSpace(rawPath) || !Directory.Exists(rawPath))
+            {
+                MessageBox.Show("유효한 폴더를 선택하세요.", "경고",
+                                MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                return false;
+            }
+
+            string normNew = NormalizePath(rawPath);
+            bool exists = combo.Items.Cast<string>()
+                                   .Any(p => NormalizePath(p) == normNew);
+            if (!exists) combo.Items.Add(normNew);        // [수정] 저장·표시 모두 정규화 경로 사용
+
+            combo.SelectedItem = combo.Items.Cast<string>()
+                                           .First(p => NormalizePath(p) == normNew);
+            return true;
+        }
+
+        /*──────────────────────────────────────────────────────────┐
+        │ 콤보박스 중복 항목 정리                                   │
+        └──────────────────────────────────────────────────────────*/
+        private void DeduplicateComboItems(ComboBox combo)
+        {
+            var uniques = combo.Items
+                                .Cast<string>()
+                                .GroupBy(NormalizePath)
+                                .Select(g => g.First())
+                                .ToArray();
+            combo.Items.Clear();
+            combo.Items.AddRange(uniques);
+        }
+
+        /*──────────────────────────────────────────────────────────┐
+        │ 폼 로드 완료 후 콤보박스 중복 제거                           │
+        └──────────────────────────────────────────────────────────*/
+        private void UcUploadPanel_Load(object sender, EventArgs e)         // [추가]
+        {
+            DeduplicateComboItems(cb_WaferFlat_Path);
+            DeduplicateComboItems(cb_PreAlign_Path);
+        }
+        
         private void btn_FlatSet_Click(object sender, EventArgs e)
         {
-            string folderPath = cb_WaferFlat_Path.Text.Trim();
-            string pluginName = cb_FlatPlugin.Text.Trim();
+            string rawFolder = cb_WaferFlat_Path.Text.Trim();
+            string rawPlugin = cb_FlatPlugin.Text.Trim();
         
-            if (string.IsNullOrEmpty(folderPath) || string.IsNullOrEmpty(pluginName))
+            if (string.IsNullOrEmpty(rawFolder) || string.IsNullOrEmpty(rawPlugin))
             {
                 MessageBox.Show("Wafer-Flat 폴더와 플러그인을 모두 선택(입력)하세요.",
                                 "알림", MessageBoxButtons.OK, MessageBoxIcon.Information);
                 return;
             }
         
-            string iniValue = $"Folder : {folderPath}, Plugin : {pluginName}";
-            settingsManager.SetValueToSection(UploadSection, UploadKey_WaferFlat, iniValue);   // ★ 개별 Key
+            if (!Directory.Exists(rawFolder))
+            {
+                MessageBox.Show("존재하지 않는 폴더입니다.",
+                                "오류", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                return;
+            }
         
-            if (!cb_WaferFlat_Path.Items.Contains(folderPath)) cb_WaferFlat_Path.Items.Add(folderPath);
-            if (!cb_FlatPlugin.Items.Contains(pluginName))     cb_FlatPlugin.Items.Add(pluginName);
+            string normalizedFolder = NormalizePath(rawFolder);   // 중복 변수 제거
+            string pluginName       = rawPlugin;                  // 누락 보완
+        
+            string iniValue = $"Folder : {normalizedFolder}, Plugin : {pluginName}";
+            settingsManager.SetValueToSection(UploadSection, UploadKey_WaferFlat, iniValue);
+        
+            AddPathToCombo(cb_WaferFlat_Path, rawFolder);
+            AddPathToCombo(cb_FlatPlugin,     pluginName);
+            DeduplicateComboItems(cb_WaferFlat_Path);
         
             logManager.LogEvent($"[ucUploadPanel] 저장(WaferFlat) ➜ {iniValue}");
             MessageBox.Show("Wafer-Flat 설정이 저장되었습니다.", "완료",
                             MessageBoxButtons.OK, MessageBoxIcon.Information);
         
-            StartUploadFolderWatcher(folderPath);
+            StartUploadFolderWatcher(normalizedFolder);
         }
         
         private void btn_FlatClear_Click(object sender, EventArgs e)
@@ -680,27 +753,38 @@ namespace ITM_Agent.ucPanel
         
         private void btn_PreAlignSet_Click(object sender, EventArgs e)
         {
-            string folderPath = cb_PreAlign_Path.Text.Trim();
-            string pluginName = cb_PreAlignPlugin.Text.Trim();
+            string rawFolder = cb_PreAlign_Path.Text.Trim();
+            string rawPlugin = cb_PreAlignPlugin.Text.Trim();
         
-            if (string.IsNullOrEmpty(folderPath) || string.IsNullOrEmpty(pluginName))
+            if (string.IsNullOrEmpty(rawFolder) || string.IsNullOrEmpty(rawPlugin))
             {
                 MessageBox.Show("Pre-Align 폴더와 플러그인을 모두 선택(입력)하세요.",
                                 "알림", MessageBoxButtons.OK, MessageBoxIcon.Information);
                 return;
             }
         
-            string iniValue = $"Folder : {folderPath}, Plugin : {pluginName}";
-            settingsManager.SetValueToSection(UploadSection, UploadKey_PreAlign, iniValue);    // ★ 개별 Key
+            if (!Directory.Exists(rawFolder))
+            {
+                MessageBox.Show("존재하지 않는 폴더입니다.",
+                                "오류", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                return;
+            }
         
-            if (!cb_PreAlign_Path.Items.Contains(folderPath))     cb_PreAlign_Path.Items.Add(folderPath);
-            if (!cb_PreAlignPlugin.Items.Contains(pluginName))    cb_PreAlignPlugin.Items.Add(pluginName);
+            string normalizedFolder = NormalizePath(rawFolder);
+            string pluginName       = rawPlugin;
+        
+            string iniValue = $"Folder : {normalizedFolder}, Plugin : {pluginName}";
+            settingsManager.SetValueToSection(UploadSection, UploadKey_PreAlign, iniValue);
+        
+            AddPathToCombo(cb_PreAlign_Path,  rawFolder);
+            AddPathToCombo(cb_PreAlignPlugin, pluginName);
+            DeduplicateComboItems(cb_PreAlign_Path);
         
             logManager.LogEvent($"[ucUploadPanel] 저장(PreAlign) ➜ {iniValue}");
             MessageBox.Show("Pre-Align 설정이 저장되었습니다.", "완료",
                             MessageBoxButtons.OK, MessageBoxIcon.Information);
         
-            StartPreAlignFolderWatcher(folderPath);
+            StartPreAlignFolderWatcher(normalizedFolder);
         }
         
         /* ===== 개선된 전체 btn_PreAlignClear_Click ===== */
