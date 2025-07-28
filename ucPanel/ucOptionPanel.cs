@@ -54,7 +54,7 @@ namespace ITM_Agent.ucPanel
             bool enable = chk_PerfoMode.Checked;
         
             /* 샘플링은 항상 필요하므로 Start() */
-            PerformanceMonitor.Instance.Start();             // [수정]
+            PerformanceMonitor.Instance.StartSampling();
             PerformanceMonitor.Instance.SetFileLogging(enable); // [수정]
         
             settingsManager.IsPerformanceLogging = enable;
