@@ -1,10 +1,11 @@
 // MainForm.cs
+using ITM_Agent.Services;
+using ITM_Agent.Startup;
+using ITM_Agent.ucPanel;
 using System;
 using System.Drawing;
 using System.IO;
 using System.Windows.Forms;
-using ITM_Agent.Services;
-using ITM_Agent.ucPanel;
 
 namespace ITM_Agent
 {
@@ -34,12 +35,17 @@ namespace ITM_Agent
 
         private bool isRunning = false; // 현재 상태 플래그
         private bool isDebugMode = false;   // 디버그 모드 상태
-        private ucOptionPanel ucOptionPanel;    // ← 옵션 패널
-        
+        private ucOptionPanel ucOptionPanel;  // ← 옵션 패널
+
         // MainForm.cs 상단 (다른 user control 변수들과 함께)
         private ucUploadPanel ucUploadPanel;
         private ucPluginPanel ucPluginPanel;
-        
+
+        protected override void OnLoad(EventArgs e)
+        {
+            base.OnLoad(e);
+            PerformanceWarmUp.Run();    // 예열
+        }
         
         public MainForm(SettingsManager settingsManager)
         {
@@ -87,7 +93,7 @@ namespace ITM_Agent
         
            btn_Run.Click += btn_Run_Click;
            btn_Stop.Click += btn_Stop_Click;
-           btn_Quit.Click += btn_Quit_Click;
+           // btn_Quit.Click += btn_Quit_Click;
         
            UpdateUIBasedOnSettings();
         }
@@ -163,7 +169,7 @@ namespace ITM_Agent
             // ② Alt+F4, 메뉴 Quit, Application.Exit 등 ‘실제 종료’ 요청
             if (!isExiting)
             {
-                e.Cancel  = true;           // 첫 진입에서는 일단 취소
+                e.Cancel = true;           // 첫 진입에서는 일단 취소
                 isExiting = true;           // 재진입 차단 플래그       // [추가]
                 PerformQuit();              // 공통 종료 루틴 호출      // [추가]
                 return;
@@ -189,7 +195,7 @@ namespace ITM_Agent
 
         private void UpdateMainStatus(string status, Color color)
         {
-            ts_Status.Text   = status;
+            ts_Status.Text = status;
             ts_Status.ForeColor = color;
             
             /* ---------- 런닝 상태 판정 로직 ---------- */
@@ -213,25 +219,25 @@ namespace ITM_Agent
             // --- 버튼/메뉴/트레이 항목 Enable 처리 ----------------
             if (status == "Stopped!")
             {
-                btn_Run.Enabled  = false;
+                btn_Run.Enabled = false;
                 btn_Stop.Enabled = false;
                 btn_Quit.Enabled = true;
             }
             else if (status == "Ready to Run")
             {
-                btn_Run.Enabled  = true;
+                btn_Run.Enabled = true;
                 btn_Stop.Enabled = false;
                 btn_Quit.Enabled = true;
             }
             else if (isRunning)                     // ← 핵심 수정
             {
-                btn_Run.Enabled  = false;
+                btn_Run.Enabled = false;
                 btn_Stop.Enabled = true;
                 btn_Quit.Enabled = false;
             }
             else
             {
-                btn_Run.Enabled  = false;
+                btn_Run.Enabled = false;
                 btn_Stop.Enabled = false;
                 btn_Quit.Enabled = false;
             }
@@ -266,7 +272,12 @@ namespace ITM_Agent
             logManager.LogEvent("Run button clicked.");
             try
             {
-                fileWatcherManager.StartWatching(); // FileWatcher 시작
+                /*──────── File Watcher 시작 ────────*/
+                fileWatcherManager.StartWatching();
+        
+                /*──────── Performance DB 로깅 ON ───*/   // [추가]
+                PerformanceDbWriter.Start(lb_eqpid.Text);  // [추가]
+                
                 isRunning = true; // 상태 업데이트
                 UpdateMainStatus("Running...", Color.Blue);
 
@@ -286,35 +297,40 @@ namespace ITM_Agent
         {
             // 경고창 표시
             DialogResult result = MessageBox.Show(
-                "프로그램을 중지하시겠습니까?￦n모든 파일 감시 및 업로드 기능이 중단됩니다.",
+                "프로그램을 중지하시겠습니까?\n모든 파일 감시 및 업로드 기능이 중단됩니다.",
                 "작업 중지 확인",
                 MessageBoxButtons.YesNo,
                 MessageBoxIcon.Warning);
-            
-            // 'Yes'를 선택한 경우에만 중지
+        
             if (result == DialogResult.Yes)
             {
                 logManager.LogEvent("Stop button clicked and confirmed.");
-                
-                fileWatcherManager.StopWatchers(); // 모니터 중지
-                isRunning = false; // 현재 Running 상태 false
-                
-                // 이제 Ready 상태인지 확인
-                bool isReady = ucConfigPanel.IsReadyToRun();
-                if (isReady)
+        
+                try
                 {
-                    // 모든 조건이 충족되었다면 "Ready to Run"
-                    UpdateMainStatus("Ready to Run", Color.Green);
+                    /*─ FileWatcher + Performance 로깅 중지 ─*/
+                    fileWatcherManager.StopWatchers();           // [기존]
+                    PerformanceDbWriter.Stop();                  // [추가]
+        
+                    isRunning = false;
+        
+                    /*─ 상태 표시 반영 ─*/
+                    bool isReady = ucConfigPanel.IsReadyToRun();
+                    UpdateMainStatus(isReady ? "Ready to Run" : "Stopped!", 
+                                     isReady ? Color.Green     : Color.Red);
+        
+                    /*─ 패널 동기화 ─*/
+                    ucConfigPanel.InitializePanel(isRunning);
+                    ucOverrideNamesPanel.InitializePanel(isRunning);
+        
+                    if (isDebugMode)
+                        logManager.LogDebug("FileWatcherManager & PerformanceDbWriter stopped successfully."); // [추가]
                 }
-                else
+                catch (Exception ex)                               // [추가]
                 {
-                    // 아니면 "Stopped!"
-                    UpdateMainStatus("Stopped!", Color.Red);
+                    logManager.LogError($"Error stopping processes: {ex.Message}"); // [추가]
+                    UpdateMainStatus("Error Stopping!", Color.Red);                 // [추가]
                 }
-    
-                // ucConfigPanel, ucOverrideNamesPanel 등 동기화
-                ucConfigPanel.InitializePanel(isRunning);
-                ucOverrideNamesPanel.InitializePanel(isRunning);
             }
             else
             {
