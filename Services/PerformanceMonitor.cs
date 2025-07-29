@@ -29,16 +29,69 @@ namespace ITM_Agent.Services
         private readonly object sync = new object();
 
         private const int FLUSH_INTERVAL_MS = 30_000;   // 30 초마다 배치 쓰기
-        private const int BULK_COUNT        = 60;       // 60건 이상 시 즉시 쓰기
+        private const int BULK_COUNT = 60;       // 60건 이상 시 즉시 쓰기
         private bool isEnabled;
+
+        private bool sampling;                 // 샘플러 실행 여부
+        private bool fileLoggingEnabled;       // [추가] 파일 기록 여부
+    
+        /*──────── 샘플링 ON ───────*/
+        internal void StartSampling()
+        {
+            if (sampling) return;
+            sampling = true;
+            sampler.Start();
+        }
+    
+        /*──────── 샘플링 + 파일로깅 OFF ──*/
+        internal void StopSampling()
+        {
+            if (!sampling) return;
+            sampler.Stop();
+            DisableFileLogging();
+            sampling = false;
+        }
+    
+        /*──────── 파일 로깅 ON/OFF API ──*/
+        internal void SetFileLogging(bool enable) =>
+            (enable ? (Action)EnableFileLogging : DisableFileLogging)();
+    
+        /*──────── 내부 구현 ─────────*/
+        private void EnableFileLogging()
+        {
+            if (fileLoggingEnabled) return;
+            Directory.CreateDirectory(GetLogDir());
+            flushTimer.Change(FLUSH_INTERVAL_MS, FLUSH_INTERVAL_MS);
+            fileLoggingEnabled = true;
+        }
+    
+        private void DisableFileLogging()
+        {
+            if (!fileLoggingEnabled) return;
+            flushTimer.Change(Timeout.Infinite, Timeout.Infinite);
+            FlushToFile();                       // 남은 버퍼 기록 후 off
+            fileLoggingEnabled = false;
+        }
+    
+        //──────────────── Consumers Registration ────────────────
+        // 외부(Batch Writer 등)가 Metric 샘플을 구독/해제할 수 있는 공개 메서드
+        internal void RegisterConsumer(Action<Metric> consumer)
+        {
+            sampler.OnSample += consumer;
+        }
+    
+        internal void UnregisterConsumer(Action<Metric> consumer)
+        {
+            sampler.OnSample -= consumer;
+        }
 
         /* ───────────── ctor ───────────── */
         private PerformanceMonitor()
         {
             sampler = new PdhSampler(intervalMs: 5_000);          // 기본 5 초
-            sampler.OnSample            += OnSampleReceived;
+            sampler.OnSample += OnSampleReceived;
             sampler.OnThresholdExceeded += () => sampler.IntervalMs = 1_000;
-            sampler.OnBackToNormal      += () => sampler.IntervalMs = 5_000;
+            sampler.OnBackToNormal += () => sampler.IntervalMs = 5_000;
 
             flushTimer = new Timer(_ => FlushToFile(),
                                    null,
@@ -79,30 +132,60 @@ namespace ITM_Agent.Services
             lock (sync)
             {
                 buffer.Push(m);
-                if (buffer.Count >= BULK_COUNT)
+                if (fileLoggingEnabled && buffer.Count >= BULK_COUNT)
                     FlushToFile();
             }
         }
 
         private void FlushToFile()
         {
-            lock (sync)
+            if (!fileLoggingEnabled || buffer.Count == 0) return;
+        
+            string fileName = $"{DateTime.Now:yyyyMMdd}_performance.log";
+            string filePath = Path.Combine(GetLogDir(), fileName);
+        
+            /*── ① 5 MB 초과 시 회전 ───────────────────────────────────────────────*/
+            RotatePerfLogIfNeeded(filePath);    // [추가]
+        
+            /*── ② 실제 쓰기 ────────────────────────────────────────────────────*/
+            using (var fs = new FileStream(filePath, FileMode.OpenOrCreate,
+                                           FileAccess.Write, FileShare.ReadWrite))
             {
-                if (buffer.Count == 0) return;
-
-                string path = Path.Combine(GetLogDir(),
-                                           $"{DateTime.Now:yyyyMMdd}_performance.log");
-
-                using (var fs = new FileStream(path, FileMode.Append,
-                                               FileAccess.Write, FileShare.Read))
+                fs.Seek(0, SeekOrigin.End);                      // 항상 Append
                 using (var sw = new StreamWriter(fs))
                 {
                     foreach (Metric m in buffer.ToArray())
-                        sw.WriteLine($"{m.Timestamp:HH:mm:ss.fff}," +
-                                     $"{m.Cpu:F1},{m.Mem:F1}");
+                    {
+                        DateTime local = m.Timestamp;            // 이미 PC 로컬 시각
+                        sw.WriteLine($"{local:yyyy-MM-dd HH:mm:ss.fff} " +
+                                     $"C:{m.Cpu:F2} M:{m.Mem:F2}");
+                    }
                 }
-                buffer.Clear();
             }
+            buffer.Clear();
+        }
+
+        /*===================  (신규) 5 MB 초과 로테이션 메서드 ===================*/
+        private void RotatePerfLogIfNeeded(string filePath)      // [추가]
+        {
+            var fi = new FileInfo(filePath);
+            if (!fi.Exists || fi.Length <= MAX_LOG_SIZE) return;  // 5 MB 이하 → 그대로
+        
+            string extension  = fi.Extension;                          // ".log"
+            string baseName   = Path.GetFileNameWithoutExtension(filePath); // "20250728_performance"
+            string dir        = fi.DirectoryName;
+        
+            int index = 1;
+            string rotatedPath;
+            do
+            {
+                string rotatedName = $"{baseName}_{index}{extension}"; // ex) 20250728_performance_3.log
+                rotatedPath = Path.Combine(dir, rotatedName);
+                index++;
+            }
+            while (File.Exists(rotatedPath));                          // 중복 방지
+        
+            File.Move(filePath, rotatedPath);                          // 회전 완료
         }
 
         private static string GetLogDir() =>
@@ -112,13 +195,13 @@ namespace ITM_Agent.Services
     /*────────────────────────── Metric ──────────────────────────*/
     internal readonly struct Metric
     {
-        public DateTime Timestamp { get; }
-        public float    Cpu       { get; }
-        public float    Mem       { get; }       // 메모리 사용률 %
+        public DateTime Timestamp { get; }   // 장비 로컬 시각
+        public float Cpu { get; }
+        public float Mem { get; }
 
         public Metric(float cpu, float mem)
         {
-            Timestamp = DateTime.Now;
+            Timestamp = DateTime.Now;         // [수정] 장비(PC) 현재 시각 그대로
             Cpu = cpu;
             Mem = mem;
         }
@@ -161,8 +244,8 @@ namespace ITM_Agent.Services
     internal sealed class PdhSampler
     {
         public event Action<Metric> OnSample;
-        public event Action         OnThresholdExceeded;
-        public event Action         OnBackToNormal;
+        public event Action OnThresholdExceeded;
+        public event Action OnBackToNormal;
 
         private readonly PerformanceCounter cpuCounter =
             new PerformanceCounter("Processor", "% Processor Time", "_Total");
@@ -186,18 +269,18 @@ namespace ITM_Agent.Services
 
         public PdhSampler(int intervalMs)
         {
-            interval    = intervalMs;
-            totalMemMb  = GetTotalMemoryMb();        // [수정] Microsoft.VisualBasic 제거
+            interval = intervalMs;
+            totalMemMb = GetTotalMemoryMb();        // [수정] Microsoft.VisualBasic 제거
         }
 
         public void Start() => timer = new Timer(_ => Sample(), null, 0, interval);
-        public void Stop()  { timer?.Dispose(); timer = null; }
+        public void Stop() { timer?.Dispose(); timer = null; }
 
         /* ───────────── 샘플링 ───────────── */
         private void Sample()
         {
-            float cpuVal  = cpuCounter.NextValue();
-            float freeMb  = memFreeMbCounter.NextValue();
+            float cpuVal = cpuCounter.NextValue();
+            float freeMb = memFreeMbCounter.NextValue();
             Thread.Sleep(50);                        // CPU 카운터 워밍업
             cpuVal = cpuCounter.NextValue();
 
