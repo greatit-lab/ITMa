@@ -149,6 +149,7 @@ namespace ITM_Agent.ucPanel
             this.chk_PerfoMode.Size = new System.Drawing.Size(15, 14);
             this.chk_PerfoMode.TabIndex = 42;
             this.chk_PerfoMode.UseVisualStyleBackColor = true;
+            this.chk_PerfoMode.CheckedChanged += new System.EventHandler(this.chk_PerfoMode_CheckedChanged);   // [추가]
             // 
             // ucOptionPanel
             // 
