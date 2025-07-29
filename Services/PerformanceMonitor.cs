@@ -1,4 +1,4 @@
-// Services\PerformanceMonitorService.cs
+// Services\PerformanceMonitor.cs
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
@@ -22,6 +22,7 @@ namespace ITM_Agent.Services
         public static PerformanceMonitor Instance => _inst.Value;
 
         /* ───────────── 내부 필드 ───────────── */
+        private const long MAX_LOG_SIZE = 5 * 1024 * 1024;   // 5 MB  // [추가]
         private readonly PdhSampler sampler;
         private readonly CircularBuffer<Metric> buffer =
             new CircularBuffer<Metric>(capacity: 1000);
@@ -171,9 +172,9 @@ namespace ITM_Agent.Services
             var fi = new FileInfo(filePath);
             if (!fi.Exists || fi.Length <= MAX_LOG_SIZE) return;  // 5 MB 이하 → 그대로
         
-            string extension  = fi.Extension;                          // ".log"
-            string baseName   = Path.GetFileNameWithoutExtension(filePath); // "20250728_performance"
-            string dir        = fi.DirectoryName;
+            string extension = fi.Extension;                          // ".log"
+            string baseName = Path.GetFileNameWithoutExtension(filePath); // "20250728_performance"
+            string dir = fi.DirectoryName;
         
             int index = 1;
             string rotatedPath;
