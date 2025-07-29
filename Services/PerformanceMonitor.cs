@@ -10,38 +10,43 @@ using System.Threading;
 namespace ITM_Agent.Services
 {
     /// <summary>
-    /// ETW/PDH 경량 샘플링 → 버퍼링 → 배치 쓰기 담당 (Singleton)
+    /// CPU·메모리 사용률을 5 초(기본) / 1 초(과부하) 간격으로 수집하여
+    /// CircularBuffer 에 저장 후 60 건 또는 30 초마다
+    /// Logs\yyyyMMdd_performance.log 로 배치 기록하는 싱글턴 서비스
     /// </summary>
-    public sealed class PerformanceMonitorService
+    public sealed class PerformanceMonitor
     {
-        /* ---------- 싱글턴 ---------- */
-        private static readonly Lazy<PerformanceMonitorService> _inst =
-            new Lazy<PerformanceMonitorService>(() => new PerformanceMonitorService());
-        public static PerformanceMonitorService Instance => _inst.Value;
+        /* ───────────── 싱글턴 ───────────── */
+        private static readonly Lazy<PerformanceMonitor> _inst =
+            new Lazy<PerformanceMonitor>(() => new PerformanceMonitor());
+        public static PerformanceMonitor Instance => _inst.Value;
 
-        /* ---------- 내부 필드 ---------- */
+        /* ───────────── 내부 필드 ───────────── */
         private readonly PdhSampler sampler;
-        private readonly CircularBuffer<Metric> buffer = new CircularBuffer<Metric>(capacity: 1000);
+        private readonly CircularBuffer<Metric> buffer =
+            new CircularBuffer<Metric>(capacity: 1000);
         private readonly Timer flushTimer;
         private readonly object sync = new object();
 
-        private const int FLUSH_INTERVAL_MS = 30_000;  // 30초
-        private const int BULK_COUNT        = 60;      // 60건 이상 시 즉시 플러시
+        private const int FLUSH_INTERVAL_MS = 30_000;   // 30 초마다 배치 쓰기
+        private const int BULK_COUNT        = 60;       // 60건 이상 시 즉시 쓰기
         private bool isEnabled;
 
-        /* ---------- ctor ---------- */
-        private PerformanceMonitorService()
+        /* ───────────── ctor ───────────── */
+        private PerformanceMonitor()
         {
-            sampler = new PdhSampler(intervalMs: 5_000);                  // 기본 5초
-            sampler.OnSample += OnSampleReceived;
+            sampler = new PdhSampler(intervalMs: 5_000);          // 기본 5 초
+            sampler.OnSample            += OnSampleReceived;
             sampler.OnThresholdExceeded += () => sampler.IntervalMs = 1_000;
-            sampler.OnBackToNormal     += () => sampler.IntervalMs = 5_000;
+            sampler.OnBackToNormal      += () => sampler.IntervalMs = 5_000;
 
-            flushTimer = new Timer(_ => FlushToFile(), null,
-                                   Timeout.Infinite, Timeout.Infinite);
+            flushTimer = new Timer(_ => FlushToFile(),
+                                   null,
+                                   Timeout.Infinite,
+                                   Timeout.Infinite);
         }
 
-        /* ---------- Public API ---------- */
+        /* ───────────── Public API ───────────── */
         public void Start()
         {
             lock (sync)
@@ -64,11 +69,11 @@ namespace ITM_Agent.Services
 
                 sampler.Stop();
                 flushTimer.Change(Timeout.Infinite, Timeout.Infinite);
-                FlushToFile();                         // 남은 버퍼 즉시 기록
+                FlushToFile();                                 // 종료 시 잔여 버퍼 기록
             }
         }
 
-        /* ---------- 내부 콜백 ---------- */
+        /* ───────────── 내부 콜백 ───────────── */
         private void OnSampleReceived(Metric m)
         {
             lock (sync)
@@ -84,8 +89,9 @@ namespace ITM_Agent.Services
             lock (sync)
             {
                 if (buffer.Count == 0) return;
+
                 string path = Path.Combine(GetLogDir(),
-                                $"{DateTime.Now:yyyyMMdd}_performance.log");
+                                           $"{DateTime.Now:yyyyMMdd}_performance.log");
 
                 using (var fs = new FileStream(path, FileMode.Append,
                                                FileAccess.Write, FileShare.Read))
@@ -103,12 +109,12 @@ namespace ITM_Agent.Services
             Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Logs");
     }
 
-    /*──────────────── Metric 구조체 ───────────────*/
+    /*────────────────────────── Metric ──────────────────────────*/
     internal readonly struct Metric
     {
         public DateTime Timestamp { get; }
         public float    Cpu       { get; }
-        public float    Mem       { get; }    // % 사용률
+        public float    Mem       { get; }       // 메모리 사용률 %
 
         public Metric(float cpu, float mem)
         {
@@ -118,7 +124,7 @@ namespace ITM_Agent.Services
         }
     }
 
-    /*──────────────── CircularBuffer<T> ───────────*/
+    /*────────────────────── CircularBuffer<T> ───────────────────*/
     internal sealed class CircularBuffer<T>
     {
         private readonly T[] buf;
@@ -136,28 +142,34 @@ namespace ITM_Agent.Services
         {
             buf[(head + count) % Capacity] = item;
             if (count == Capacity)
-                head = (head + 1) % Capacity;          // overwrite
+                head = (head + 1) % Capacity;    // overwrite
             else
                 count++;
         }
+
         public IEnumerable<T> ToArray() =>
             Enumerable.Range(0, count)
                       .Select(i => buf[(head + i) % Capacity]);
-        public void Clear() { head = count = 0; }
+
+        public void Clear() => head = count = 0;
     }
 
-    /*──────────────── PDH 래퍼 (경량) ─────────────*/
+    /*──────────────────────── PdhSampler ────────────────────────*/
+    /// <summary>
+    /// PDH(PerfCounter) 기반 경량 샘플러 + 임계치 감시
+    /// </summary>
     internal sealed class PdhSampler
     {
         public event Action<Metric> OnSample;
         public event Action         OnThresholdExceeded;
         public event Action         OnBackToNormal;
 
-        private readonly PerformanceCounter cpu =
+        private readonly PerformanceCounter cpuCounter =
             new PerformanceCounter("Processor", "% Processor Time", "_Total");
-        private readonly PerformanceCounter mem =
+        private readonly PerformanceCounter memFreeMbCounter =
             new PerformanceCounter("Memory", "Available MBytes");
 
+        private readonly float totalMemMb;            // [추가] WMI 1회 조회
         private Timer timer;
         private int interval;
         private bool overload;
@@ -167,42 +179,32 @@ namespace ITM_Agent.Services
             get => interval;
             set
             {
-                interval = Math.Max(500, value);        // 최소 0.5초 보호
-                if (timer != null)
-                    timer.Change(0, interval);
+                interval = Math.Max(500, value);      // 최소 0.5 초
+                timer?.Change(0, interval);
             }
         }
 
         public PdhSampler(int intervalMs)
         {
-            interval = intervalMs;
+            interval    = intervalMs;
+            totalMemMb  = GetTotalMemoryMb();        // [수정] Microsoft.VisualBasic 제거
         }
 
-        public void Start()
-        {
-            timer = new Timer(_ => Sample(), null, 0, interval);
-        }
-        public void Stop()
-        {
-            timer?.Dispose();
-            timer = null;
-        }
+        public void Start() => timer = new Timer(_ => Sample(), null, 0, interval);
+        public void Stop()  { timer?.Dispose(); timer = null; }
 
+        /* ───────────── 샘플링 ───────────── */
         private void Sample()
         {
-            // 첫 호출 시 CPU 카운터 워밍-업 필요 → 2회 읽기
-            float cpuVal = cpu.NextValue();
-            float memFree = mem.NextValue();           // MB
-            Thread.Sleep(50);
-            cpuVal = cpu.NextValue();
+            float cpuVal  = cpuCounter.NextValue();
+            float freeMb  = memFreeMbCounter.NextValue();
+            Thread.Sleep(50);                        // CPU 카운터 워밍업
+            cpuVal = cpuCounter.NextValue();
 
-            var pc = new Microsoft.VisualBasic.Devices.ComputerInfo(); // 가벼움
-            float memTotal = pc.TotalPhysicalMemory / 1_048_576f;      // MB
-            float memUsedRatio = ((memTotal - memFree) / memTotal) * 100f;
+            float usedRatio = ((totalMemMb - freeMb) / totalMemMb) * 100f;
+            OnSample?.Invoke(new Metric(cpuVal, usedRatio));
 
-            OnSample?.Invoke(new Metric(cpuVal, memUsedRatio));
-
-            bool isOver = (cpuVal > 75f) || (memUsedRatio > 80f);
+            bool isOver = (cpuVal > 75f) || (usedRatio > 80f);
             if (isOver && !overload)
             {
                 overload = true;
@@ -213,6 +215,22 @@ namespace ITM_Agent.Services
                 overload = false;
                 OnBackToNormal?.Invoke();
             }
+        }
+
+        /* ───────────── 총 메모리(WMI) ───────────── */
+        private static float GetTotalMemoryMb()
+        {
+            try
+            {
+                using (var searcher = new ManagementObjectSearcher(
+                       "SELECT TotalVisibleMemorySize FROM Win32_OperatingSystem"))
+                {
+                    foreach (ManagementObject o in searcher.Get())
+                        return Convert.ToSingle(o["TotalVisibleMemorySize"]) / 1024f;
+                }
+            }
+            catch { /* 실패 시 0 반환 → 나눗셈 보호는 호출부에서 */ }
+            return 0f;
         }
     }
 }
