@@ -1,10 +1,11 @@
 // Services\PerformanceDbWriter.cs
+using ConnectInfo;
+using ITM_Agent.Services;
 using Npgsql;
 using System;
 using System.Collections.Generic;
-using System.Configuration;
+using System.Linq;
 using System.Threading;
-using ITM_Agent.Services;   // PerformanceMonitor
 
 namespace ITM_Agent.Services
 {
@@ -22,15 +23,14 @@ namespace ITM_Agent.Services
         private const int BULK = 60;
         private const int FLUSH_MS = 30_000;
 
+        /* LogManager 인스턴스 (Writer 전용) ────────────────────────────────*/
+        private static readonly LogManager logger =
+            new LogManager(AppDomain.CurrentDomain.BaseDirectory);   // [추가]
+
         /* ---------- 생성 & 소멸 ---------- */
         private PerformanceDbWriter(string eqpid)
         {
             this.eqpid = eqpid;
-        
-            /*──────── 기존: private 필드 직접 접근 [삭제]────────
-            PerformanceMonitor.Instance.sampler.OnSample += OnSample;
-            ─────────────────────────────────────────────*/
-        
             PerformanceMonitor.Instance.RegisterConsumer(OnSample);      // [수정]
         
             timer = new Timer(_ => Flush(), null, FLUSH_MS, FLUSH_MS);
@@ -40,8 +40,9 @@ namespace ITM_Agent.Services
 
         public static void Start(string eqpid)
         {
-            if (current != null) return;               // 이미 실행 중
-            PerformanceMonitor.Instance.Start();       // 모니터 시작
+            if (current != null) return;
+            
+            PerformanceMonitor.Instance.StartSampling();
             current = new PerformanceDbWriter(eqpid);
         }
 
@@ -49,7 +50,7 @@ namespace ITM_Agent.Services
         {
             if (current == null) return;
         
-            PerformanceMonitor.Instance.Stop();
+            PerformanceMonitor.Instance.StopSampling();
             current.Flush();
             current.timer.Dispose();
         
@@ -83,12 +84,17 @@ namespace ITM_Agent.Services
                 buf.Clear();
             }
         
-            /* ② 연결 문자열 */
+            /* ② 커넥션 문자열 ------------------------------------------- */
             string cs;
             try     { cs = DatabaseInfo.CreateDefault().GetConnectionString(); }
             catch   { logger.LogError("[Perf] ConnString 실패"); return; }
         
-            /* ③ 배치 INSERT */
+            /* ③ 보정량 계산 --------------------------------------------- */
+            DateTime serverNow = DateTime.Now;                       // 서버 기준 시각(로컬)
+            DateTime tsMax = batch.Max(b => b.Timestamp);            // 버퍼 중 가장 늦은 ts
+            TimeSpan diff = serverNow - tsMax;                       // 보정량
+        
+            /* ④ 배치 INSERT --------------------------------------------- */
             try
             {
                 using (var conn = new NpgsqlConnection(cs))
@@ -99,29 +105,34 @@ namespace ITM_Agent.Services
                     {
                         cmd.Transaction = tx;
                         cmd.CommandText =
-                          "INSERT INTO eqp_perf (eqpid, ts, cpu_usage, mem_usage) " +
-                          "VALUES (@eqp, @ts, @cpu, @mem) " +
-                          "ON CONFLICT (eqpid, ts) DO NOTHING;";
+                          "INSERT INTO eqp_perf " +
+                          " (eqpid, ts, serv_ts, cpu_usage, mem_usage) " +
+                          " VALUES (@eqp, @ts, @srv, @cpu, @mem) " +
+                          " ON CONFLICT (eqpid, ts) DO NOTHING;";
         
-                        var pEqp = cmd.Parameters.Add("@eqp", NpgsqlTypes.NpgsqlDbType.Varchar);
-                        var pTs  = cmd.Parameters.Add("@ts",  NpgsqlTypes.NpgsqlDbType.Timestamp); // [수정]
-                        var pCpu = cmd.Parameters.Add("@cpu", NpgsqlTypes.NpgsqlDbType.Real);
-                        var pMem = cmd.Parameters.Add("@mem", NpgsqlTypes.NpgsqlDbType.Real);
+                        var pEqp = cmd.Parameters.Add("@eqp",  NpgsqlTypes.NpgsqlDbType.Varchar);
+                        var pTs  = cmd.Parameters.Add("@ts",   NpgsqlTypes.NpgsqlDbType.Timestamp);
+                        var pSrv = cmd.Parameters.Add("@srv",  NpgsqlTypes.NpgsqlDbType.Timestamp);
+                        var pCpu = cmd.Parameters.Add("@cpu",  NpgsqlTypes.NpgsqlDbType.Real);
+                        var pMem = cmd.Parameters.Add("@mem",  NpgsqlTypes.NpgsqlDbType.Real);
         
                         foreach (var m in batch)
                         {
-                            /* Eqpid 접두어 “Eqpid: ” 제거 후 삽입 */
-                            pEqp.Value = eqpid.Replace("Eqpid:", "", StringComparison.OrdinalIgnoreCase)
-                                              .Trim();
+                            /* eqpid 접두어 제거 */
+                            string cleanEqp = eqpid.StartsWith("Eqpid:", StringComparison.OrdinalIgnoreCase)
+                                              ? eqpid.Substring(6).Trim() : eqpid.Trim();
+                            pEqp.Value = cleanEqp;
         
-                            /* 타임스탬프 → 로컬·밀리초 3자리로 절단 */
-                            var local = m.Timestamp.ToLocalTime();
-                            var truncated = new DateTime(local.Year, local.Month, local.Day,
-                                                         local.Hour, local.Minute, local.Second,
-                                                         local.Millisecond, DateTimeKind.Unspecified);
-                            pTs.Value = truncated;
+                            /* ts → 밀리초 3자리 절단 */
+                            var ts = new DateTime(m.Timestamp.Year, m.Timestamp.Month, m.Timestamp.Day,
+                                                  m.Timestamp.Hour, m.Timestamp.Minute, m.Timestamp.Second,
+                                                  m.Timestamp.Millisecond, DateTimeKind.Unspecified);
+                            pTs.Value = ts;
         
-                            /* CPU·메모리 2 자리 반올림 */
+                            /* serv_ts = ts + diff */
+                            pSrv.Value = ts + diff;
+        
+                            /* 지표 2자리 반올림 */
                             pCpu.Value = Math.Round(m.Cpu, 2);
                             pMem.Value = Math.Round(m.Mem, 2);
         
@@ -130,6 +141,10 @@ namespace ITM_Agent.Services
                         tx.Commit();
                     }
                 }
+            }
+            catch (Exception ex)
+            {
+                logger.LogError($"[Perf] Batch INSERT 실패: {ex.Message}");
             }
             catch (Exception ex)
             {
