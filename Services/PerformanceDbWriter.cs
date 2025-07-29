@@ -93,6 +93,7 @@ namespace ITM_Agent.Services
             DateTime serverNow = DateTime.Now;                       // 서버 기준 시각(로컬)
             DateTime tsMax = batch.Max(b => b.Timestamp);            // 버퍼 중 가장 늦은 ts
             TimeSpan diff = serverNow - tsMax;                       // 보정량
+            TimeSyncProvider.SetDiff(eqpid, diff);
         
             /* ④ 배치 INSERT --------------------------------------------- */
             try
@@ -118,21 +119,23 @@ namespace ITM_Agent.Services
         
                         foreach (var m in batch)
                         {
-                            /* eqpid 접두어 제거 */
-                            string cleanEqp = eqpid.StartsWith("Eqpid:", StringComparison.OrdinalIgnoreCase)
-                                              ? eqpid.Substring(6).Trim() : eqpid.Trim();
-                            pEqp.Value = cleanEqp;
+                            /* eqpid 전처리 */
+                            string clean = eqpid.StartsWith("Eqpid:", StringComparison.OrdinalIgnoreCase)
+                                           ? eqpid.Substring(6).Trim() : eqpid.Trim();
+                            pEqp.Value = clean;
         
-                            /* ts → 밀리초 3자리 절단 */
+                            /* ts (밀리초 절단) */
                             var ts = new DateTime(m.Timestamp.Year, m.Timestamp.Month, m.Timestamp.Day,
-                                                  m.Timestamp.Hour, m.Timestamp.Minute, m.Timestamp.Second,
-                                                  m.Timestamp.Millisecond, DateTimeKind.Unspecified);
-                            pTs.Value = ts;
+                                                  m.Timestamp.Hour, m.Timestamp.Minute, m.Timestamp.Second);
+                            pTs.Value  = ts;
         
-                            /* serv_ts = ts + diff */
-                            pSrv.Value = ts + diff;
+                            /* serv_ts = ts + diff, 이후 밀리초 제거 ----------------------- */
+                            var srv = TimeSyncProvider.Instance.Apply(ts);              // [추가] ts + diff
+                            srv = new DateTime(srv.Year, srv.Month, srv.Day,            // [추가] 밀리초 절단
+                                               srv.Hour, srv.Minute, srv.Second);
+                            pSrv.Value = srv;
         
-                            /* 지표 2자리 반올림 */
+                            /* 사용률 */
                             pCpu.Value = Math.Round(m.Cpu, 2);
                             pMem.Value = Math.Round(m.Mem, 2);
         
