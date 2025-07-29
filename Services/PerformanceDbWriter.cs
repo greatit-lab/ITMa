@@ -72,7 +72,6 @@ namespace ITM_Agent.Services
             }
         }
 
-        /* ---------- 배치 INSERT ---------- */
         private void Flush()
         {
             /* ① 버퍼 스냅샷 */
@@ -83,19 +82,12 @@ namespace ITM_Agent.Services
                 batch = new List<Metric>(buf);
                 buf.Clear();
             }
-
-            /* ② 연결 문자열 획득 (ConnectInfo DLL) */
+        
+            /* ② 연결 문자열 */
             string cs;
-            try
-            {
-                cs = DatabaseInfo.CreateDefault().GetConnectionString();
-            }
-            catch (Exception ex)
-            {
-                logger.LogError($"[PerformanceDbWriter] ConnString 실패: {ex.Message}");   // [수정]
-                return;
-            }
-
+            try     { cs = DatabaseInfo.CreateDefault().GetConnectionString(); }
+            catch   { logger.LogError("[Perf] ConnString 실패"); return; }
+        
             /* ③ 배치 INSERT */
             try
             {
@@ -107,21 +99,32 @@ namespace ITM_Agent.Services
                     {
                         cmd.Transaction = tx;
                         cmd.CommandText =
-                            "INSERT INTO eqp_perf (eqpid, ts, cpu_usage, mem_usage) " +
-                            "VALUES (@eqp, @ts, @cpu, @mem) " +
-                            "ON CONFLICT (eqpid, ts) DO NOTHING;";
-
+                          "INSERT INTO eqp_perf (eqpid, ts, cpu_usage, mem_usage) " +
+                          "VALUES (@eqp, @ts, @cpu, @mem) " +
+                          "ON CONFLICT (eqpid, ts) DO NOTHING;";
+        
                         var pEqp = cmd.Parameters.Add("@eqp", NpgsqlTypes.NpgsqlDbType.Varchar);
-                        var pTs  = cmd.Parameters.Add("@ts",  NpgsqlTypes.NpgsqlDbType.TimestampTz);
+                        var pTs  = cmd.Parameters.Add("@ts",  NpgsqlTypes.NpgsqlDbType.Timestamp); // [수정]
                         var pCpu = cmd.Parameters.Add("@cpu", NpgsqlTypes.NpgsqlDbType.Real);
                         var pMem = cmd.Parameters.Add("@mem", NpgsqlTypes.NpgsqlDbType.Real);
-
+        
                         foreach (var m in batch)
                         {
-                            pEqp.Value = eqpid;
-                            pTs.Value  = m.Timestamp;
-                            pCpu.Value = m.Cpu;
-                            pMem.Value = m.Mem;
+                            /* Eqpid 접두어 “Eqpid: ” 제거 후 삽입 */
+                            pEqp.Value = eqpid.Replace("Eqpid:", "", StringComparison.OrdinalIgnoreCase)
+                                              .Trim();
+        
+                            /* 타임스탬프 → 로컬·밀리초 3자리로 절단 */
+                            var local = m.Timestamp.ToLocalTime();
+                            var truncated = new DateTime(local.Year, local.Month, local.Day,
+                                                         local.Hour, local.Minute, local.Second,
+                                                         local.Millisecond, DateTimeKind.Unspecified);
+                            pTs.Value = truncated;
+        
+                            /* CPU·메모리 2 자리 반올림 */
+                            pCpu.Value = Math.Round(m.Cpu, 2);
+                            pMem.Value = Math.Round(m.Mem, 2);
+        
                             cmd.ExecuteNonQuery();
                         }
                         tx.Commit();
@@ -130,8 +133,9 @@ namespace ITM_Agent.Services
             }
             catch (Exception ex)
             {
-                logger.LogError($"[PerformanceDbWriter] Batch INSERT 실패: {ex.Message}");  // [수정]
+                logger.LogError($"[Perf] Batch INSERT 실패: {ex.Message}");
             }
         }
+
     }
 }
