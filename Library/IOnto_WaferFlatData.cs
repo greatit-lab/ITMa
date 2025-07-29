@@ -345,16 +345,36 @@ namespace Onto_WaferFlatDataLib
         #region === DB Upload ===
         private void UploadToSQL(DataTable dt, string srcFile)
         {
+            /* 0) 보정값 준비 */
+            TimeSpan diff = ITM_Agent.Services.TimeSyncProvider.Instance.Diff;   // ★ [추가]
+        
+            /* 1) 컬럼 정의 확장 */
+            if (!dt.Columns.Contains("serv_ts"))
+                dt.Columns.Add("serv_ts", typeof(DateTime));                     // ★ [추가]
+            if (!dt.Columns.Contains("eqpid"))
+                dt.Columns.Add("eqpid", typeof(string));
+        
+            /* 2) Row 보정값 반영 */
+            foreach (DataRow r in dt.Rows)
+            {
+                if (r["datetime"] != DBNull.Value)
+                {
+                    DateTime ts = (DateTime)r["datetime"];
+                    r["serv_ts"] = ts + diff;                                    // ★ [추가]
+                }
+                else r["serv_ts"] = DBNull.Value;
+            }
+        
+            /* 3) DB 연결 */
             var dbInfo = DatabaseInfo.CreateDefault();
             using (var conn = new NpgsqlConnection(dbInfo.GetConnectionString()))
             {
                 conn.Open();
                 using (var tx = conn.BeginTransaction())
                 {
-                    // 1) 컬럼 파라미터 목록 동적 생성
-                    var cols = dt.Columns.Cast<DataColumn>()
-                                        .Select(c => c.ColumnName)
-                                        .ToArray();
+                    /* 4) 동적 파라미터 목록 */
+                    var cols = dt.Columns.Cast<DataColumn>().Select(c => c.ColumnName).ToArray();
+                    
                     // PostgreSQL 은 대소문자/예약어 충돌 방지를 위해 "컬럼" 을 큰따옴표로 감쌉니다
                     string colList   = string.Join(",", cols.Select(c => $"\"{c}\""));
                     string paramList = string.Join(",", cols.Select(c => "@" + c));
