@@ -146,11 +146,6 @@ namespace ITM_Agent.Services
             {
                 logger.LogError($"[Perf] Batch INSERT 실패: {ex.Message}");
             }
-            catch (Exception ex)
-            {
-                logger.LogError($"[Perf] Batch INSERT 실패: {ex.Message}");
-            }
         }
-
     }
 }
