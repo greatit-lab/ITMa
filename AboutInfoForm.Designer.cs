@@ -54,7 +54,7 @@ namespace ITM_Agent
             //
             // grpDev
             //
-            this.grpDev.Controls.Add(this.Label5);
+            this.grpDev.Controls.Add(this.label5);
             this.grpDev.Controls.Add(this.lblDevList);
             this.grpDev.Location = new System.Drawing.Point(175, 149);
             this.grpDev.Name = "grpDev";
@@ -75,7 +75,7 @@ namespace ITM_Agent
             // lblDevList
             //
             this.lblDevList.AutoSize = true;
-            this.lblDevList.Location = new System.Drawing.Point(22, 40);
+            this.lblDevList.Location = new System.Drawing.Point(22, 20);
             this.lblDevList.Name = "lblDevList";
             this.lblDevList.Size = new System.Drawing.Size(157, 12);
             this.lblDevList.TabIndex = 0;
@@ -115,7 +115,7 @@ namespace ITM_Agent
             this.label2.AutoSize = true;
             this.label2.Location = new System.Drawing.Point(172, 75);
             this.label2.Name = "label2";
-            this.label2.Size = new System.Drawing.Size(255, 12);
+            this.label2.Size = new System.Drawing.Size(225, 12);
             this.label2.TabIndex = 7;
             this.label2.Text = "정보를 실시간으로 모니터링 및 분류하고";
             //
