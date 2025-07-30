@@ -16,6 +16,7 @@ namespace ITM_Agent
         private LogManager logManager;
         private FileWatcherManager fileWatcherManager;
         private EqpidManager eqpidManager;
+        private InfoRetentionCleaner infoCleaner;
 
         private NotifyIcon trayIcon;
         private ContextMenuStrip trayMenu;
