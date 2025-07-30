@@ -9,6 +9,7 @@ using System.Text.RegularExpressions;
 using Npgsql;               // ★ MySql → Npgsql
 using ConnectInfo;
 using System.Threading;
+using ITM_Agent.Services;
 
 namespace Onto_WaferFlatDataLib
 {
@@ -17,7 +18,7 @@ namespace Onto_WaferFlatDataLib
     {
         /* (1) ── 전역 Debug 모드 플래그 ──────────────────────────────── */
         private static volatile bool _debugEnabled = false;
-        public  static void  SetDebugMode(bool enable) => _debugEnabled = enable;
+        public static void SetDebugMode(bool enable) => _debugEnabled = enable;
 
         /* (2) ── 공통 경로 & 동시성 ─────────────────────────────────── */
         private static readonly object _sync = new object();
@@ -44,7 +45,7 @@ namespace Onto_WaferFlatDataLib
                     Directory.CreateDirectory(_logDir);
 
                 string filePath = GetPath(suffix);
-                string line     = $"{DateTime.Now:yyyy-MM-dd HH:mm:ss.fff} " +
+                string line = $"{DateTime.Now:yyyy-MM-dd HH:mm:ss.fff} " +
                                   $"[Onto_WaferFlatData] {msg}{Environment.NewLine}";
 
                 const int MAX_RETRY = 3;
@@ -63,7 +64,7 @@ namespace Onto_WaferFlatDataLib
                         return;
                     }
                     catch (IOException) when (i < MAX_RETRY)
-                    {   Thread.Sleep(250); }
+                    { Thread.Sleep(250); }
                 }
             }
         }
@@ -75,7 +76,7 @@ namespace Onto_WaferFlatDataLib
         string PluginName { get; }
         void ProcessAndUpload(string folderPath, string settingsFilePath = "Settings.ini");
     }
-    
+  
     public class Onto_WaferFlatData : IOnto_WaferFlatData
     {
         private static string ReadAllTextSafe(string path, Encoding enc, int timeoutMs = 30000)
@@ -86,7 +87,7 @@ namespace Onto_WaferFlatDataLib
                 try
                 {
                     using (var fs = new FileStream(path, FileMode.Open,
-                                                   FileAccess.Read, FileShare.ReadWrite))
+                                                  FileAccess.Read, FileShare.ReadWrite))
                     using (var sr = new StreamReader(fs, enc))
                     {
                         return sr.ReadToEnd();
@@ -106,7 +107,7 @@ namespace Onto_WaferFlatDataLib
             // .NET Core/5+/6+/8+ 에서 CP949 등 코드 페이지 인코딩 사용 가능하게 등록
             Encoding.RegisterProvider(CodePagesEncodingProvider.Instance);
         }
-        
+
         public string PluginName => "Onto_WaferFlatData";
 
         #region === 외부 호출 ===
@@ -114,7 +115,7 @@ namespace Onto_WaferFlatDataLib
         {
             /* 1) 첫 호출 기록 */
             SimpleLogger.Event($"ProcessAndUpload(file) ▶ {filePath}");
-        
+
             /* 2) 파일 준비가 될 때까지 재시도 */
             if (!WaitForFileReady(filePath, 20, 500))
             {
@@ -122,7 +123,7 @@ namespace Onto_WaferFlatDataLib
                 SimpleLogger.Event($"SKIP – file still not ready ▶ {filePath}");
                 return;
             }
-        
+
             /* 3) 정상 처리 */
             string eqpid = GetEqpidFromSettings("Settings.ini");
             try
@@ -134,18 +135,18 @@ namespace Onto_WaferFlatDataLib
                 SimpleLogger.Error($"Unhandled EX ▶ {ex.Message}");
             }
         }
-        
+
         /* UploadPanel 에서 2-파라미터로 호출할 때 */
         public void ProcessAndUpload(string filePath, string settingsPath = "Settings.ini")
         {
             SimpleLogger.Event($"ProcessAndUpload(file,ini) ▶ {filePath}");
-        
+
             if (!WaitForFileReady(filePath, 20, 500))
             {
                 SimpleLogger.Event($"SKIP – file still not ready ▶ {filePath}");
                 return;
             }
-        
+
             string eqpid = GetEqpidFromSettings(settingsPath);
             try
             {
@@ -157,7 +158,7 @@ namespace Onto_WaferFlatDataLib
             }
         }
         #endregion
-        
+
         /* -----------------------------------------------------------------
          * 파일 Ready 헬퍼 – FileWatcherManager·OverrideNamesPanel 에서
          * 이미 사용 중인 패턴을 그대로 차용 (동일 알고리즘) :contentReference[oaicite:1]{index=1}
@@ -185,17 +186,17 @@ namespace Onto_WaferFlatDataLib
             }
             return false;                            // 최종 실패
         }
-        
+
         private void ProcessFile(string filePath, string eqpid)                       // [추가]
         {
             SimpleLogger.Debug($"PARSE ▶ {Path.GetFileName(filePath)}");
-        
+
             /* ---------------------------------------------------- *
              * 0) 파일 읽기
              * ---------------------------------------------------- */
             string fileContent = ReadAllTextSafe(filePath, Encoding.GetEncoding(949)); // [수정] raw → fileContent
-            var    lines       = fileContent.Split(new[] { "\r\n", "\n" }, StringSplitOptions.None);
-        
+            var lines = fileContent.Split(new[] { "\r\n", "\n" }, StringSplitOptions.None);
+
             /* ---------------------------------------------------- *
              * 1) Key–Value 메타 파싱
              * ---------------------------------------------------- */
@@ -210,7 +211,7 @@ namespace Onto_WaferFlatDataLib
                     if (!meta.ContainsKey(key)) meta[key] = val;
                 }
             }
-        
+
             /* 1-1) WaferNo, DateTime 추출 */
             int? waferNo = null;
             if (meta.TryGetValue("Wafer ID", out string waferId))
@@ -218,11 +219,11 @@ namespace Onto_WaferFlatDataLib
                 var m = Regex.Match(waferId, @"W(\d+)");
                 if (m.Success && int.TryParse(m.Groups[1].Value, out int w)) waferNo = w;
             }
-        
+
             DateTime dtVal = DateTime.MinValue;
             if (meta.TryGetValue("Date and Time", out string dtStr))
                 DateTime.TryParse(dtStr, out dtVal);
-        
+
             /* ---------------------------------------------------- *
              * 2) 헤더 위치 탐색
              * ---------------------------------------------------- */
@@ -235,75 +236,75 @@ namespace Onto_WaferFlatDataLib
                 SimpleLogger.Error("Header NOT FOUND → skip");
                 return;
             }
-        
+
             /* ---------- 2-1) 헤더 정규화 함수 ---------- */
             string NormalizeHeader(string h)
             {
                 /* ① 일괄 소문자화 */
                 h = h.ToLowerInvariant();
-            
+
                 /* ② (no cal), no cal, no_cal  →  nocal   // [추가] */
                 h = Regex.Replace(h, @"\(\s*no\s*cal\.?\s*\)", " nocal ", RegexOptions.IgnoreCase);
-                h = Regex.Replace(h, @"\bno[\s_]*cal\b",          "nocal", RegexOptions.IgnoreCase);
-            
+                h = Regex.Replace(h, @"\bno[\s_]*cal\b", "nocal", RegexOptions.IgnoreCase);
+
                 /* ③ (cal) → cal (후속 언더바 처리로 ‘_cal’ 유지) */
                 h = Regex.Replace(h, @"\(\s*cal\.?\s*\)", " cal ", RegexOptions.IgnoreCase);
-            
+
                 /* ④ 기타 단위·불필요 어구 제거 */
                 h = h.Replace("(mm)", "")
                      .Replace("(탆)", "")
                      .Replace("die x", "diex")
                      .Replace("die y", "diey")
                      .Trim();
-            
+
                 /* ⑤ 공백 → _ , 특수문자 삭제 */
                 h = Regex.Replace(h, @"\s+", "_");
                 h = Regex.Replace(h, @"[#/:\-]", "");
-            
+
                 return h;                  // 예) cu_ht_nocal, point, die_x …
             }
-        
+
             /* ---------- 2-2) 헤더 리스트 & 매핑 사전 ---------- */
-            var headers     = lines[hdrIdx].Split(',').Select(NormalizeHeader).ToList();          // [수정]
+            var headers = lines[hdrIdx].Split(',').Select(NormalizeHeader).ToList();          // [수정]
             var headerIndex = headers.Select((h, idx) => new { h, idx })
                                      .GroupBy(x => x.h)                                           // 중복 제거
                                      .ToDictionary(g => g.Key, g => g.First().idx);               // [수정]
-        
+
             /* ---------------------------------------------------- *
              * 3) 데이터 파싱
              * ---------------------------------------------------- */
-            var rows    = new List<Dictionary<string, object>>();
-            var intCols = new HashSet<string>{ "point","dierow","diecol","dienum","diepointtag" }; // [수정]
-        
+            var rows = new List<Dictionary<string, object>>();
+            var intCols = new HashSet<string> { "point", "dierow", "diecol", "dienum", "diepointtag" }; // [수정]
+ 
             for (int i = hdrIdx + 1; i < lines.Length; i++)
             {
                 if (string.IsNullOrWhiteSpace(lines[i])) continue;
-        
+
                 var vals = lines[i].Split(',').Select(v => v.Trim()).ToArray();
                 if (vals.Length < headers.Count) continue;
-        
+
                 /* 3-1) 기본 메타 컬럼 */
                 var row = new Dictionary<string, object>
                 {
                     ["cassettercp"] = meta.TryGetValue("Cassette Recipe Name", out var v1) ? v1 : "",
-                    ["stagercp"]    = meta.TryGetValue("Stage Recipe Name",    out var v2) ? v2 : "",
-                    ["stagegroup"]  = meta.TryGetValue("Stage Group Name",     out var v3) ? v3 : "",
-                    ["lotid"]       = meta.TryGetValue("Lot ID",               out var v4) ? v4 : "",
-                    ["waferid"]     = waferNo ?? (object)DBNull.Value,
-                    ["datetime"]    = (dtVal != DateTime.MinValue) ? (object)dtVal : DBNull.Value,
-                    ["film"]        = meta.TryGetValue("Film Name",            out var v5) ? v5 : ""
+                    ["stagercp"] = meta.TryGetValue("Stage Recipe Name", out var v2) ? v2 : "",
+                    ["stagegroup"]  = meta.TryGetValue("Stage Group Name", out var v3) ? v3 : "",
+                    ["lotid"] = meta.TryGetValue("Lot ID", out var v4) ? v4 : "",
+                    ["waferid"] = waferNo ?? (object)DBNull.Value,
+                    ["datetime"] = (dtVal != DateTime.MinValue) ? (object)dtVal : DBNull.Value,
+                    ["film"] = meta.TryGetValue("Film Name", out var v5) ? v5 : ""
                 };
-        
+
                 /* 3-2) 헤더-값 매핑 */
                 int tmpInt; double tmpDbl;
                 foreach (var kv in headerIndex)
                 {
                     string colName = kv.Key;             // 소문자 snake_case
-                    int    idx     = kv.Value;
+                    int idx = kv.Value;
                     string valRaw  = (idx < vals.Length) ? vals[idx] : "";      // [수정] raw → valRaw
-        
+
                     if (string.IsNullOrEmpty(valRaw)) { row[colName] = DBNull.Value; continue; }
-        
+
                     if (intCols.Contains(colName) && int.TryParse(valRaw, out tmpInt))
                         row[colName] = tmpInt;
                     else if (double.TryParse(valRaw, out tmpDbl))
@@ -311,23 +312,23 @@ namespace Onto_WaferFlatDataLib
                     else
                         row[colName] = valRaw;
                 }
-        
+
                 rows.Add(row);
             }
-        
+
             if (rows.Count == 0)
             {
                 SimpleLogger.Debug("rows=0 → skip");
                 return;
             }
-        
+
             /* ---------------------------------------------------- *
              * 4) DataTable 생성 & DB 업로드
              * ---------------------------------------------------- */
             DataTable dt = new DataTable();
             foreach (var k in rows[0].Keys) dt.Columns.Add(k, typeof(object));
             dt.Columns.Add("eqpid", typeof(string));
-        
+
             foreach (var r in rows)
             {
                 var dr = dt.NewRow();
@@ -335,25 +336,25 @@ namespace Onto_WaferFlatDataLib
                 dr["eqpid"] = eqpid;
                 dt.Rows.Add(dr);
             }
-        
+
             UploadToSQL(dt, Path.GetFileName(filePath));
             SimpleLogger.Event($"{Path.GetFileName(filePath)} ▶ rows={dt.Rows.Count}");
-        
+
             try { File.Delete(filePath); } catch { /* ignore */ }
         }
-        
+
         #region === DB Upload ===
         private void UploadToSQL(DataTable dt, string srcFile)
         {
             /* 0) 보정값 준비 */
             TimeSpan diff = ITM_Agent.Services.TimeSyncProvider.Instance.Diff;   // ★ [추가]
-        
+
             /* 1) 컬럼 정의 확장 */
             if (!dt.Columns.Contains("serv_ts"))
                 dt.Columns.Add("serv_ts", typeof(DateTime));                     // ★ [추가]
             if (!dt.Columns.Contains("eqpid"))
                 dt.Columns.Add("eqpid", typeof(string));
-        
+
             /* 2) Row 보정값 반영 */
             foreach (DataRow r in dt.Rows)
             {
@@ -364,7 +365,7 @@ namespace Onto_WaferFlatDataLib
                 }
                 else r["serv_ts"] = DBNull.Value;
             }
-        
+
             /* 3) DB 연결 */
             var dbInfo = DatabaseInfo.CreateDefault();
             using (var conn = new NpgsqlConnection(dbInfo.GetConnectionString()))
@@ -374,11 +375,11 @@ namespace Onto_WaferFlatDataLib
                 {
                     /* 4) 동적 파라미터 목록 */
                     var cols = dt.Columns.Cast<DataColumn>().Select(c => c.ColumnName).ToArray();
-                    
+
                     // PostgreSQL 은 대소문자/예약어 충돌 방지를 위해 "컬럼" 을 큰따옴표로 감쌉니다
                     string colList   = string.Join(",", cols.Select(c => $"\"{c}\""));
                     string paramList = string.Join(",", cols.Select(c => "@" + c));
-                    
+
                     string sql = $"INSERT INTO public.wf_flat ({colList}) VALUES ({paramList});";
 
                     using (var cmd = new NpgsqlCommand(sql, conn, tx))
@@ -386,7 +387,7 @@ namespace Onto_WaferFlatDataLib
                         // 2) 파라미터 미리 준비
                         foreach (var c in cols)
                             cmd.Parameters.Add(new NpgsqlParameter("@" + c, DbType.Object));
-        
+
                         int ok = 0;
                         try
                         {
@@ -395,7 +396,7 @@ namespace Onto_WaferFlatDataLib
                             {
                                 foreach (var c in cols)
                                     cmd.Parameters["@" + c].Value = r[c] ?? DBNull.Value;
-        
+
                                 cmd.ExecuteNonQuery();
                                 ok++;
                             }
@@ -433,7 +434,7 @@ namespace Onto_WaferFlatDataLib
             }
         }
         #endregion
-        
+
         #region === Eqpid 읽기 ===
         private string GetEqpidFromSettings(string iniPath)
         {
