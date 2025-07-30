@@ -50,53 +50,56 @@ namespace ITM_Agent
         
         public MainForm(SettingsManager settingsManager)
         {
-           this.settingsManager = settingsManager ?? throw new ArgumentNullException(nameof(settingsManager));
-           this.settingsManager = settingsManager;
-        
-           InitializeComponent();
-        
-           // 폼 핸들이 생성된 직후 상태 표시(Stopped, 빨간색)
-           this.HandleCreated += (sender, e) => UpdateMainStatus("Stopped", Color.Red);
-        
-           string baseDir = AppDomain.CurrentDomain.BaseDirectory;
-           logManager = new LogManager(baseDir);
-        
-           InitializeUserControls();
-           RegisterMenuEvents();
-        
-           // 설정 패널
-           ucSc1 = new ucPanel.ucConfigurationPanel(settingsManager);
-           // Override Names 패널 (Designer에서 배치된 ucConfigPanel 컨트롤 인스턴스 전달)
-           ucOverrideNamesPanel = new ucOverrideNamesPanel(settingsManager,this.ucConfigPanel,this.logManager,this.settingsManager.IsDebugMode);
-        
-           // FileWatcherManager 생성 (SettingsManager, LogManager, 디버그 모드 플래그)
-           fileWatcherManager = new FileWatcherManager(settingsManager, logManager, isDebugMode);
-           eqpidManager = new EqpidManager(settingsManager, logManager, AppVersion);
-        
-           // 아이콘 설정
-           SetFormIcon();
-        
-           this.Text = $"ITM Agent - {AppVersion}";
-           this.MaximizeBox = false;
-        
-           InitializeTrayIcon();
-           this.FormClosing += MainForm_FormClosing;
-        
-           // EQPID 초기화 및 메인 기능 진행
-           eqpidManager.InitializeEqpid();
-           string eqpid = settingsManager.GetEqpid();
-           if (!string.IsNullOrEmpty(eqpid))
-           {
+            this.settingsManager = settingsManager ?? throw new ArgumentNullException(nameof(settingsManager));
+            this.settingsManager = settingsManager;
+            
+            InitializeComponent();
+            
+            // 폼 핸들이 생성된 직후 상태 표시(Stopped, 빨간색)
+            this.HandleCreated += (sender, e) => UpdateMainStatus("Stopped", Color.Red);
+            
+            string baseDir = AppDomain.CurrentDomain.BaseDirectory;
+            logManager = new LogManager(baseDir);
+            
+            InitializeUserControls();
+            RegisterMenuEvents();
+            
+            // 설정 패널
+            ucSc1 = new ucPanel.ucConfigurationPanel(settingsManager);
+            // Override Names 패널 (Designer에서 배치된 ucConfigPanel 컨트롤 인스턴스 전달)
+            ucOverrideNamesPanel = new ucOverrideNamesPanel(settingsManager,this.ucConfigPanel,this.logManager,this.settingsManager.IsDebugMode);
+            
+            // FileWatcherManager 생성 (SettingsManager, LogManager, 디버그 모드 플래그)
+            fileWatcherManager = new FileWatcherManager(settingsManager, logManager, isDebugMode);
+            eqpidManager = new EqpidManager(settingsManager, logManager, AppVersion);
+            
+            // 기존에 없던 InfoRetentionCleaner 즉시 실행  // [추가]
+            infoCleaner = new InfoRetentionCleaner(settingsManager);
+            
+            // 아이콘 설정
+            SetFormIcon();
+            
+            this.Text = $"ITM Agent - {AppVersion}";
+            this.MaximizeBox = false;
+            
+            InitializeTrayIcon();
+            this.FormClosing += MainForm_FormClosing;
+            
+            // EQPID 초기화 및 메인 기능 진행
+            eqpidManager.InitializeEqpid();
+            string eqpid = settingsManager.GetEqpid();
+            if (!string.IsNullOrEmpty(eqpid))
+            {
                ProceedWithMainFunctionality(eqpid);
-           }
-        
-           fileWatcherManager.InitializeWatchers();
-        
-           btn_Run.Click += btn_Run_Click;
-           btn_Stop.Click += btn_Stop_Click;
-           // btn_Quit.Click += btn_Quit_Click;
-        
-           UpdateUIBasedOnSettings();
+            }
+            
+            fileWatcherManager.InitializeWatchers();
+            
+            btn_Run.Click += btn_Run_Click;
+            btn_Stop.Click += btn_Stop_Click;
+            // btn_Quit.Click += btn_Quit_Click;
+            
+            UpdateUIBasedOnSettings();
         }
         
         private void SetFormIcon()
@@ -120,16 +123,12 @@ namespace ITM_Agent
 
             trayMenu.Items.Add(new ToolStripSeparator());
 
-            runItem = new ToolStripMenuItem("Run", null, (sender, e) => btn_Run.PerformClick());
-            trayMenu.Items.Add(runItem);
-            
-            // Stop 메뉴 클릭 시 btn_Stop_Click 이벤트 호출
-            stopItem = new ToolStripMenuItem("Stop", null, (sender, e) => btn_Stop.PerformClick());
-            trayMenu.Items.Add(stopItem);
-            
-            // Quit 메뉴 클릭 시 btn_Quit_Click 이벤트 호출
-            quitItem = new ToolStripMenuItem("Quit", null, (sender, e) => btn_Quit.PerformClick());
-            trayMenu.Items.Add(quitItem);
+            /* ▼ Tray 전용 핸들러 연결 ▼ */
+            runItem  = new ToolStripMenuItem("Run",  null, Tray_Run_Click);   // [수정]
+            stopItem = new ToolStripMenuItem("Stop", null, Tray_Stop_Click);  // [수정]
+            quitItem = new ToolStripMenuItem("Quit", null, Tray_Quit_Click);  // [수정]
+        
+            trayMenu.Items.AddRange(new ToolStripItem[] { runItem, stopItem, quitItem });
 
             trayIcon = new NotifyIcon
             {
@@ -139,6 +138,24 @@ namespace ITM_Agent
                 Text = this.Text
             };
             trayIcon.DoubleClick += (sender, e) => RestoreMainForm();
+        }
+
+        private void Tray_Run_Click(object sender, EventArgs e)
+        {
+            if (btn_Run.Enabled)         // 안전 가드
+                btn_Run_Click(sender, e);   // 내부 로직 직접 호출
+        }
+        
+        private void Tray_Stop_Click(object sender, EventArgs e)
+        {
+            if (btn_Stop.Enabled)
+                btn_Stop_Click(sender, e);
+        }
+        
+        private void Tray_Quit_Click(object sender, EventArgs e)
+        {
+            if (btn_Quit.Enabled)
+                btn_Quit_Click(sender, e);
         }
 
         private void RestoreMainForm()
@@ -373,7 +390,12 @@ namespace ITM_Agent
             {
                 fileWatcherManager?.StopWatchers();   // ☑ Dispose → StopWatchers
                 fileWatcherManager = null;
-                
+
+                /* ▼ InfoRetentionCleaner 정리 ▼ */          // [추가]
+                infoCleaner?.Dispose();
+                infoCleaner = null;
+                /* ▲ InfoRetentionCleaner 정리 ▲ */
+
                 // SettingsManager는 Dispose 필요 없음
                 settingsManager = null;
             }
@@ -398,8 +420,11 @@ namespace ITM_Agent
             {
                 logManager?.LogError($"[MainForm] Tray clean-up error: {ex}");
             }
+
+            /* 3) ▼ infoCleaner 타이머 해제 */
+            try { infoCleaner?.Dispose(); } catch { /* ignore */ }
             
-            /* 3) 애플리케이션 종료 */
+            /* 4) 애플리케이션 종료 */
             BeginInvoke(new Action(() =>
             {
                 logManager?.LogEvent("[MainForm] Application.Exit invoked.");
