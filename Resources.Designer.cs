@@ -1,5 +1,5 @@
 // Resources.Designer.cs
-namespace ITM_Agent.Properties{
+namespace ITM_Agent.Propertiesa {
     using System;
     [global::System.CodeDom.Compiler.GeneratedCodeAttribute("System.Resources.Tools.StronglyTypedResourceBuilder", "17.0.0.0")]
     [global::System.Diagnostics.DebuggerNonUserCodeAttribute()]
@@ -77,4 +77,5 @@ namespace ITM_Agent.Properties{
                 return ResourceManager.GetString("MSG_REGEX_REQUIRED", resourceCulture);
             }
         }
+    }
 }
