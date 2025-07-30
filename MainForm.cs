@@ -226,7 +226,8 @@ namespace ITM_Agent
             ucOverrideNamesPanel?.UpdateStatusOnRun(isRunning);
             ucImageTransPanel?.UpdateStatusOnRun(isRunning);
             ucUploadPanel?.UpdateStatusOnRun(isRunning);
-            ucPluginPanel?.UpdateStatusOnRun(isRunning);      // 추가
+            ucPluginPanel?.UpdateStatusOnRun(isRunning);
+            ucOptionPanel?.UpdateStatusOnRun(isRunning);
 
             // 디버그 체크박스
             // cb_DebugMode.Enabled = !isRunning;
@@ -560,10 +561,11 @@ namespace ITM_Agent
             // 7) 필요한 패널 중 디자이너에 배치되지 않은 것만 컨트롤 컬렉션에 추가
             this.Controls.Add(ucOverrideNamesPanel);
         
-            // 8) ★ 모든 패널 Run 상태 초기화 ★               // [수정]
+            // 8) 모든 패널 Run 상태 초기화
             ucConfigPanel.InitializePanel(isRunning);
             ucOverrideNamesPanel.InitializePanel(isRunning);
-            ucPluginPanel.InitializePanel(isRunning);         // [추가]
+            ucPluginPanel.InitializePanel(isRunning);
+            ucOptionPanel.InitializePanel(isRunning);
         }
 
         private void RegisterMenuEvents()
@@ -613,7 +615,8 @@ namespace ITM_Agent
             // 상태 동기화
             if (control is ucConfigurationPanel cfg) cfg.InitializePanel(isRunning);
             else if (control is ucOverrideNamesPanel ov) ov.InitializePanel(isRunning);
-            else if (control is ucPluginPanel plg) plg.InitializePanel(isRunning);  // [추가]
+            else if (control is ucPluginPanel plg) plg.InitializePanel(isRunning);
+            else if (control is ucOptionPanel opt) opt.InitializePanel(isRunning);
         }
 
         private void UpdateMenusBasedOnType()
