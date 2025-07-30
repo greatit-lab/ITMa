@@ -11,30 +11,100 @@ namespace ITM_Agent.ucPanel
     /// </summary>
     public partial class ucOptionPanel : UserControl
     {
+        private const string OptSection          = "Option";
+        private const string Key_PerfLog         = "EnablePerfoLog";
+        private const string Key_InfoAutoDel     = "EnableInfoAutoDel";
+        private const string Key_InfoRetention   = "InfoRetentionDays";
+
         private readonly SettingsManager settingsManager;
 
-        /// <summary>
-        /// MainForm 에 디버그 모드 변경을 알리는 이벤트
-        /// </summary>
         public event Action<bool> DebugModeChanged;
 
         public ucOptionPanel(SettingsManager settings)
         {
             this.settingsManager = settings ?? throw new ArgumentNullException(nameof(settings));
-
-            // 디자이너에서 생성된 UI 초기화
             InitializeComponent();
 
-            // Settings.ini 값으로 체크 초기화
-            chk_DebugMode.Checked = settingsManager.IsDebugMode;
-            
-            chk_PerfoMode.Checked = false;       // Settings.ini 연동 예정
-            chk_PerfoMode.CheckedChanged += chk_PerfoMode_CheckedChanged;   // [추가]
+            /* 1) Retention 콤보박스 고정 값 • DropDownList */
+            cb_info_Retention.Items.Clear();                                       // [추가]
+            cb_info_Retention.Items.AddRange(new object[] { "1", "3", "5" });      // [추가]
+            cb_info_Retention.DropDownStyle = ComboBoxStyle.DropDownList;          // [추가]
+    
+            /* 2) UI 기본 비활성화 */
+            UpdateRetentionControls(false);                                        // [추가]
+    
+            /* 3) 이벤트 연결 */
+            chk_PerfoMode.CheckedChanged += chk_PerfoMode_CheckedChanged;          // [추가]
+            chk_infoDel.CheckedChanged   += chk_infoDel_CheckedChanged;            // [추가]
+            cb_info_Retention.SelectedIndexChanged += cb_info_Retention_SelectedIndexChanged; // [추가]
+    
+            /* 4) Settings.ini → UI 복원 */
+            LoadOptionSettings(); 
         }
 
-        /// <summary>
-        /// Debug Mode 체크박스 상태 변경 시 호출
-        /// </summary>
+        private void LoadOptionSettings()
+        {
+            // DebugMode 는 기존 로직 유지
+            chk_DebugMode.Checked = settingsManager.IsDebugMode;
+    
+            /* Perf-Log */
+            bool perf = settingsManager.GetValueFromSection(OptSection, Key_PerfLog) == "1";
+            chk_PerfoMode.Checked = perf;
+    
+            /* Info 자동 삭제 */
+            bool infoDel = settingsManager.GetValueFromSection(OptSection, Key_InfoAutoDel) == "1";
+            chk_infoDel.Checked = infoDel;
+    
+            /* Retention 일수 */
+            string days = settingsManager.GetValueFromSection(OptSection, Key_InfoRetention);
+            if (days == "1" || days == "3" || days == "5")
+                cb_info_Retention.SelectedItem = days;
+    
+            /* UI 동기화 */
+            UpdateRetentionControls(infoDel);
+        }
+
+        private void UpdateRetentionControls(bool enabled)                         // [추가]
+        {
+            label3.Enabled           = enabled;
+            cb_info_Retention.Enabled = enabled;
+            label4.Enabled           = enabled;
+    
+            if (!enabled) cb_info_Retention.SelectedIndex = -1;  // 체크 해제 시 초기화
+        }
+
+        private void chk_PerfoMode_CheckedChanged(object sender, EventArgs e)      // [수정]
+        {
+            bool enable = chk_PerfoMode.Checked;
+    
+            PerformanceMonitor.Instance.StartSampling();
+            PerformanceMonitor.Instance.SetFileLogging(enable);
+    
+            settingsManager.IsPerformanceLogging = enable;                 // 기존 프로퍼티
+            settingsManager.SetValueToSection(OptSection,                  // INI 동기화
+                                              Key_PerfLog,
+                                              enable ? "1" : "0");         // [추가]
+        }
+
+        private void chk_infoDel_CheckedChanged(object sender, EventArgs e)        // [추가]
+        {
+            bool enable = chk_infoDel.Checked;
+            UpdateRetentionControls(enable);
+    
+            settingsManager.SetValueToSection(OptSection, Key_InfoAutoDel, enable ? "1" : "0");
+    
+            if (!enable)
+                settingsManager.SetValueToSection(OptSection, Key_InfoRetention, ""); // Retention 초기화
+        }
+
+        private void cb_info_Retention_SelectedIndexChanged(object sender, EventArgs e) // [추가]
+        {
+            if (cb_info_Retention.SelectedItem is null) return;
+    
+            string days = cb_info_Retention.SelectedItem.ToString();
+            settingsManager.SetValueToSection(OptSection, Key_InfoRetention, days);
+        }
+
         private void chk_DebugMode_CheckedChanged(object sender, EventArgs e)
         {
             bool isDebug = chk_DebugMode.Checked;
@@ -47,17 +117,6 @@ namespace ITM_Agent.ucPanel
 
             // ③ MainForm 알림
             DebugModeChanged?.Invoke(isDebug);
-        }
-        
-        private void chk_PerfoMode_CheckedChanged(object sender, EventArgs e)
-        {
-            bool enable = chk_PerfoMode.Checked;
-        
-            /* 샘플링은 항상 필요하므로 Start() */
-            PerformanceMonitor.Instance.StartSampling();
-            PerformanceMonitor.Instance.SetFileLogging(enable); // [수정]
-        
-            settingsManager.IsPerformanceLogging = enable;
         }
     }
 }
