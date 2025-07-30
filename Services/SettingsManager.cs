@@ -23,11 +23,11 @@ namespace ITM_Agent.Services
         public SettingsManager(string settingsFilePath)
         {
             this.settingsFilePath = settingsFilePath;
-        
+
             // 🌟 로그 매니저 주입 — 기본 실행 경로 Logs 폴더 사용
             logManager = new LogManager(AppDomain.CurrentDomain.BaseDirectory);
             logManager.LogEvent("[SettingsManager] Instantiated");
-        
+
             EnsureSettingsFileExists();
         }
 
@@ -42,26 +42,33 @@ namespace ITM_Agent.Services
             }
         }
 
-        public bool IsInfoDeletionEnabled
-        {
-            get => bool.TryParse(GetValueFromSection("InfoRetention", "AutoDelete"), out var b) && b;
-            set => SetValueToSection("InfoRetention", "AutoDelete", value.ToString());
-        }
-        
-        public int InfoRetentionDays
-        {
-            get => int.TryParse(GetValueFromSection("InfoRetention", "Days"), out var d) ? d : 1;
-            set => SetValueToSection("InfoRetention", "Days", value.ToString());
-        }
-
         public bool IsPerformanceLogging
         {
-            get => isPerformanceLogging;
+            get => GetValueFromSection("Option", "EnablePerfoLog") == "1";
             set
             {
-                isPerformanceLogging = value;
-                /* 필요시 Settings.ini 저장 로직 구현 */
+                isPerformanceLogging = value;                    // 메모리 보존
+                SetValueToSection("Option", "EnablePerfoLog",    // INI 반영
+                                  value ? "1" : "0");
             }
+        }
+
+        public bool IsInfoDeletionEnabled
+        {
+            get => GetValueFromSection("Option", "EnableInfoAutoDel") == "1";
+            set => SetValueToSection("Option", "EnableInfoAutoDel",
+                                      value ? "1" : "0");
+        }
+
+        public int InfoRetentionDays
+        {
+            get
+            {
+                var raw = GetValueFromSection("Option", "InfoRetentionDays");
+                return int.TryParse(raw, out var d) ? d : 1;
+            }
+            set => SetValueToSection("Option", "InfoRetentionDays",
+                                     value.ToString());
         }
 
         private void EnsureSettingsFileExists()
@@ -100,7 +107,7 @@ namespace ITM_Agent.Services
                 lock (fileLock)
                 {
                     // File.WriteAllLines(settingsFilePath, lines);   // ❌ 로그 없음
-        
+
                     // ===== 개선 =====
                     File.WriteAllLines(settingsFilePath, lines);
                     logManager.LogEvent($"[SettingsManager] Wrote {lines.Length} lines -> {settingsFilePath}");
@@ -296,7 +303,7 @@ namespace ITM_Agent.Services
             var lines = File.Exists(settingsFilePath)
                 ? File.ReadAllLines(settingsFilePath).ToList()
                 : new List<string>();
-        
+
             // ① 기존 [Regex] 섹션 삭제
             int sectionIndex = lines.FindIndex(l => l.Trim() == "[Regex]");
             if (sectionIndex != -1)
@@ -306,21 +313,21 @@ namespace ITM_Agent.Services
                 if (endIndex == -1) endIndex = lines.Count;
                 lines.RemoveRange(sectionIndex, endIndex - sectionIndex);
             }
-        
+
             // ② 새 [Regex] 섹션 작성
             if (lines.Count > 0 && !string.IsNullOrWhiteSpace(lines.Last()))
                 lines.Add("");
-        
+
             lines.Add("[Regex]");
             foreach (var kvp in regexDict)
                 lines.Add($"{kvp.Key} -> {kvp.Value}");
             lines.Add("");
-        
+
             // ③ **한 번만 저장**  // [수정]
             File.WriteAllLines(settingsFilePath, lines);
-        
+
             // File.WriteAllLines(settingsFilePath, ConvertRegexListToLines(regexDict)); // [삭제]
-        
+
             // ④ 변경 알림
             NotifyRegexSettingsUpdated();
         }
@@ -366,7 +373,7 @@ namespace ITM_Agent.Services
             {
                 if (!File.Exists(filePath))
                     throw new FileNotFoundException("File not found.", filePath);
-        
+
                 File.Copy(filePath, settingsFilePath, overwrite: true);
                 logManager.LogEvent($"[SettingsManager] Loaded settings from {filePath}");
             }
@@ -572,7 +579,7 @@ namespace ITM_Agent.Services
                 // 내부 데이터 구조 갱신
             }
         }
-        
+
         public string GetBaseFolder()
         {
             var baseFolders = GetFoldersFromSection("[BaseFolder]");
@@ -580,38 +587,38 @@ namespace ITM_Agent.Services
             {
                 return baseFolders[0];  // 첫 번째 BaseFolder 반환
             }
-          
+
             return null; // BaseFolder가 없는 경우 null 반환
         }
-        
+
         public void RemoveKeyFromSection(string section, string key)
         {
             if (!File.Exists(settingsFilePath))
                 return;
-        
+
             // 파일의 모든 줄을 읽어옵니다.
             var lines = File.ReadAllLines(settingsFilePath).ToList();
             bool inSection = false;
-        
+
             for (int i = 0; i < lines.Count; i++)
             {
                 string line = lines[i];
                 string trimmed = line.Trim();
-        
+
                 // 지정 섹션의 시작을 찾습니다.
                 if (trimmed.Equals($"[{section}]", StringComparison.OrdinalIgnoreCase))
                 {
                     inSection = true;
                     continue;
                 }
-        
+
                 // 섹션 내부에 있다면
                 if (inSection)
                 {
                     // 새로운 섹션이 시작되면 종료
                     if (trimmed.StartsWith("[") && trimmed.EndsWith("]"))
                         break;
-        
+
                     // '=' 문자의 인덱스를 찾습니다.
                     int equalIndex = line.IndexOf('=');
                     if (equalIndex >= 0)
@@ -627,7 +634,7 @@ namespace ITM_Agent.Services
                     }
                 }
             }
-            
+
             File.WriteAllLines(settingsFilePath, lines);
         }
     }
