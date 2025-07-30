@@ -1,93 +1,176 @@
 // AboutInfoForm.Designer.cs
-using System.Drawing;               // [추가]
-using System.Windows.Forms;         // [추가]
+using System.Drawing;
+using System.Windows.Forms;
 
 namespace ITM_Agent
 {
     partial class AboutInfoForm
     {
         /* ---------------- 디자이너 필드 ---------------- */
-        private PictureBox picIcon;                    // [추가]
-        private Label lblTitle;                        // [추가]
-        private Label lblDesc;                         // [추가]
-        private GroupBox grpDev;                       // [추가]
-        private Label lblDevList;                      // [추가]
-        private Button btnOk;                          // [추가]
+        private PictureBox picIcon;
+        private Label lblTitle;
+        private GroupBox grpDev;
+        private Label lblDevList;
+        private Button btnOk;
 
         /// <summary>
         /// 디자이너 지원에 필요한 메서드입니다.
         /// </summary>
-        private void InitializeComponent()             // [추가]
+        private void InitializeComponent()
         {
-            /* ----- 컨트롤 인스턴스 ----- */
-            this.picIcon   = new PictureBox();         // [추가]
-            this.lblTitle  = new Label();              // [추가]
-            this.lblDesc   = new Label();              // [추가]
-            this.grpDev    = new GroupBox();           // [추가]
-            this.lblDevList= new Label();              // [추가]
-            this.btnOk     = new Button();             // [추가]
-
-            /* ----- Form 자체 ----- */
-            this.SuspendLayout();                      // [추가]
-            this.AutoScaleMode   = AutoScaleMode.None; // [추가]
-            this.ClientSize      = new Size(420, 240); // [추가]
-            this.FormBorderStyle = FormBorderStyle.FixedDialog; // [추가]
-            this.MaximizeBox     = false;              // [추가]
-            this.MinimizeBox     = false;              // [추가]
-            this.StartPosition   = FormStartPosition.CenterParent; // [추가]
-            this.Text            = "About ITM Agent";  // [추가]
-
-            /* ----- picIcon ----- */
-            this.picIcon.Image   = null;
-            this.picIcon.SizeMode    = PictureBoxSizeMode.Zoom; // [추가]
-            this.picIcon.Location    = new Point(20, 20);       // [추가]
-            this.picIcon.Size        = new Size(88, 88);        // [추가]
-
-            /* ----- lblTitle ----- */
-            this.lblTitle.AutoSize   = true;                    // [추가]
-            this.lblTitle.Font       = new Font("Segoe UI", 12F, FontStyle.Bold); // [추가]
-            this.lblTitle.Location   = new Point(130, 20);      // [추가]
-            this.lblTitle.Text       = "ITM Agent v1.0.0";       // [추가]
-
-            /* ----- lblDesc ----- */
-            this.lblDesc.AutoSize    = true;                                // [추가]
-            this.lblDesc.Location    = new Point(132, 55);                  // [추가]
-            this.lblDesc.Text        =
-                "• 폴더 모니터링, 이미지 → PDF 병합\n" +                  // [추가]
-                "• 정규식 기반 파일 자동 정리/변환\n" +                  // [추가]
-                "• PostgreSQL 업로드 플러그인 구조 지원";                 // [추가]
-
-            /* ----- grpDev & lblDevList ----- */
-            this.grpDev.Location     = new Point(20, 120);     // [추가]
-            this.grpDev.Size         = new Size(380, 90);      // [추가]
-            this.grpDev.Text         = "Developers";           // [추가]
-
-            this.lblDevList.AutoSize = true;                   // [추가]
-            this.lblDevList.Location = new Point(15, 25);      // [추가]
-            this.lblDevList.Text     =
-                "• Gizmo Lee  (Backend/DB)\n" +                 // [추가]
-                "• Max Kim   (WinForms UI)\n" +                 // [추가]
-                "• J.Doe     (QA / Release)";                  // [추가]
-
-            this.grpDev.Controls.Add(this.lblDevList);         // [추가]
-
-            /* ----- btnOk ----- */
-            this.btnOk.Text         = "OK";                    // [추가]
-            this.btnOk.DialogResult = DialogResult.OK;         // [추가]
-            this.btnOk.Anchor       = AnchorStyles.Bottom | AnchorStyles.Right; // [추가]
-            this.btnOk.Location     = new Point(315, 205);     // [추가]
-            this.btnOk.Size         = new Size(75, 23);        // [추가]
-
-            /* ----- Form 컨트롤 등록 ----- */
-            this.Controls.Add(this.picIcon);                   // [추가]
-            this.Controls.Add(this.lblTitle);                  // [추가]
-            this.Controls.Add(this.lblDesc);                   // [추가]
-            this.Controls.Add(this.grpDev);                    // [추가]
-            this.Controls.Add(this.btnOk);                     // [추가]
-            this.AcceptButton = this.btnOk;                    // [추가]
-
-            this.ResumeLayout(false);                          // [추가]
-            this.PerformLayout();                              // [추가]
+            this.picIcon = new System.Windows.Forms.PictureBox();
+            this.lblTitle = new System.Windows.Forms.Label();
+            this.grpDev = new System.Windows.Forms.GroupBox();
+            this.label5 = new System.Windows.Forms.Label();
+            this.lblDevList = new System.Windows.Forms.Label();
+            this.btnOk = new System.Windows.Forms.Button();
+            this.lb_Version = new System.Windows.Forms.Label();
+            this.label1 = new System.Windows.Forms.Label();
+            this.label2 = new System.Windows.Forms.Label();
+            this.label3 = new System.Windows.Forms.Label();
+            this.label4 = new System.Windows.Forms.Label();
+            ((System.ComponentModel.ISupportInitialize)(this.picIcon)).BeginInit();
+            this.grpDev.SuspendLayout();
+            this.SuspendLayout();
+            // 
+            // picIcon
+            // 
+            this.picIcon.Location = new System.Drawing.Point(-14, 68);
+            this.picIcon.Name = "picIcon";
+            this.picIcon.Size = new System.Drawing.Size(181, 191);
+            this.picIcon.SizeMode = System.Windows.Forms.PictureBoxSizeMode.Zoom;
+            this.picIcon.TabIndex = 0;
+            this.picIcon.TabStop = false;
+            //
+            // lblTitle
+            //
+            this.lblTitle.AutoSize = true;
+            this.lblTitle.Font = new System.Drawing.Font("Segoe UI", 13F, System.Drawing.FontStyle.Bold);
+            this.lblTitle.Location = new System.Drawing.Point(12, 19);
+            this.lblTitle.Name = "lblTitle";
+            this.lblTitle.Size = new System.Drawing.Size(103, 25);
+            this.lblTitle.TabIndex = 1;
+            this.lblTitle.Text = "ITM Agent";
+            //
+            // grpDev
+            //
+            this.grpDev.Controls.Add(this.Label5);
+            this.grpDev.Controls.Add(this.lblDevList);
+            this.grpDev.Location = new System.Drawing.Point(175, 149);
+            this.grpDev.Name = "grpDev";
+            this.grpDev.Size = new System.Drawing.Size(234, 59);
+            this.grpDev.TabIndex = 3;
+            this.grpDev.TabStop = false;
+            this.grpDev.Text = "Developers";
+            //
+            // label5
+            //
+            this.label5.AutoSize = true;
+            this.label5.Location = new System.Drawing.Point(27, 40);
+            this.label5.Name = "label5";
+            this.label5.Size = new System.Drawing.Size(202, 12);
+            this.label5.TabIndex = 1;
+            this.label5.Text = "(Memory CMP Technology Team)";
+            //
+            // lblDevList
+            //
+            this.lblDevList.AutoSize = true;
+            this.lblDevList.Location = new System.Drawing.Point(22, 40);
+            this.lblDevList.Name = "lblDevList";
+            this.lblDevList.Size = new System.Drawing.Size(157, 12);
+            this.lblDevList.TabIndex = 0;
+            this.lblDevList.Text = "• gily.choi@samsung.com";
+            //
+            // btnOk
+            //
+            this.btnOk.Anchor = ((System.Windows.Forms.AnchorStyles)((System.Windows.Forms.AnchorStyles.Bottom | System.Windows.Forms.AnchorStyles.Right)));
+            this.btnOk.DialogResult = System.Windows.Forms.DialogResult.OK;
+            this.btnOk.Location = new System.Drawing.Point(315, 212);
+            this.btnOk.Name = "btnOk";
+            this.btnOk.Size = new System.Drawing.Size(94, 23);
+            this.btnOk.TabIndex = 4;
+            this.btnOk.Text = "OK";
+            //
+            // lb_Version
+            //
+            this.lb_Version.AutoSize = true;
+            this.lb_Version.Font = new System.Drawing.Font("Segoe UI", 12F, System.Drawing.FontStyle.Bold);
+            this.lb_Version.Location = new System.Drawing.Point(113, 22);
+            this.lb_Version.Name = "lb_Version";
+            this.lb_Version.Size = new System.Drawing.Size(35, 21);
+            this.lb_Version.TabIndex = 5;
+            this.lb_Version.Text = "Ver";
+            //
+            // label1
+            //
+            this.label1.AutoSize = true;
+            this.label1.Location = new System.Drawing.Point(172, 53);
+            this.label1.Name = "label1";
+            this.label1.Size = new System.Drawing.Size(233, 12);
+            this.label1.TabIndex = 6;
+            this.label1.Text = "ITM Agent는 ITM 계측 장비에서 생성되는";
+            //
+            // label2
+            //
+            this.label2.AutoSize = true;
+            this.label2.Location = new System.Drawing.Point(172, 75);
+            this.label2.Name = "label2";
+            this.label2.Size = new System.Drawing.Size(255, 12);
+            this.label2.TabIndex = 7;
+            this.label2.Text = "정보를 실시간으로 모니터링 및 분류하고";
+            //
+            // label3
+            //
+            this.label3.AutoSize = true;
+            this.label3.Location = new System.Drawing.Point(173, 97);
+            this.label3.Name = "label3";
+            this.label3.Size = new System.Drawing.Size(232, 12);
+            this.label3.TabIndex = 8;
+            this.label3.Text = "필요로 하는 형태로 자동 가공 ㆍ DB 적재를";
+            //
+            // label4
+            //
+            this.label4.AutoSize = true;
+            this.label4.BackColor = System.Drawing.SystemColors.Control;
+            this.label4.Location = new System.Drawing.Point(173, 117);
+            this.label4.Name = "label4";
+            this.label4.Size = new System.Drawing.Size(161, 12);
+            this.label4.TabIndex = 9;
+            this.label4.Text = "처리하는 관리자 도구입니다.";
+            // 
+            // AboutInfoForm
+            // 
+            this.AcceptButton = this.btnOk;
+            this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.None;
+            this.ClientSize = new System.Drawing.Size(420, 240);
+            this.Controls.Add(this.label4);
+            this.Controls.Add(this.label3);
+            this.Controls.Add(this.label2);
+            this.Controls.Add(this.label1);
+            this.Controls.Add(this.lb_Version);
+            this.Controls.Add(this.lblTitle);
+            this.Controls.Add(this.grpDev);
+            this.Controls.Add(this.btnOk);
+            this.Controls.Add(this.picIcon);
+            this.FormBorderStyle = System.Windows.Forms.FormBorderStyle.FixedDialog;
+            this.MaximizeBox = false;
+            this.MinimizeBox = false;
+            this.Name = "AboutInfoForm";
+            this.StartPosition = System.Windows.Forms.FormStartPosition.CenterParent;
+            this.Text = "About Information...";
+            ((System.ComponentModel.ISupportInitialize)(this.picIcon)).EndInit();
+            this.grpDev.ResumeLayout(false);
+            this.grpDev.PerformLayout();
+            this.ResumeLayout(false);
+            this.PerformLayout();
+            
         }
+
+        private Label lb_Version;
+        private Label label1;
+        private Label label2;
+        private Label label3;
+        private Label label4;
+        private Label label5;
     }
 }
