@@ -51,6 +51,31 @@ namespace ITM_Agent.ucPanel
             LoadOptionSettings();
         }
 
+        #region ====== Run 상태 동기화 ======   // [추가]
+        /// <summary>Run/Stop 상태에 따라 모든 입력 컨트롤 Enable 토글</summary>
+        private void SetControlsEnabled(bool enabled)     // [추가]
+        {
+            chk_DebugMode.Enabled  = enabled;             // [추가]
+            chk_PerfoMode.Enabled  = enabled;             // [추가]
+            chk_infoDel.Enabled    = enabled;             // [추가]
+    
+            /* Retention-관련 컨트롤은 ‘Info Delete’ 체크 여부와 동기화 */
+            UpdateRetentionControls(enabled && chk_infoDel.Checked);   // [추가]
+        }
+    
+        /// <summary>MainForm 에서 Run/Stop 전환 시 호출</summary>
+        public void UpdateStatusOnRun(bool isRunning)     // [추가]
+        {
+            SetControlsEnabled(!isRunning);               // [추가]
+        }
+    
+        /// <summary>처음 패널 로드 또는 화면 전환 시 상태 맞춤</summary>
+        public void InitializePanel(bool isRunning)       // [추가]
+        {
+            SetControlsEnabled(!isRunning);               // [추가]
+        }
+        #endregion
+
         private void LoadOptionSettings()
         {
             // DebugMode 는 기존 로직 유지
@@ -110,9 +135,14 @@ namespace ITM_Agent.ucPanel
 
         private void cb_info_Retention_SelectedIndexChanged(object s, EventArgs e)
         {
-            if (!chk_infoDel.Checked) return;
-            settingsManager.InfoRetentionDays =
-                int.Parse(cb_info_Retention.SelectedItem.ToString());
+            if (!chk_infoDel.Checked) return;                  // Info-삭제 기능 Off 시 무시
+
+            object item = cb_info_Retention.SelectedItem;
+            if (item == null)     // 선택 해제 상태
+                return;
+
+            if (int.TryParse(item.ToString(), out int days))   // 파싱 안전 처리
+                settingsManager.InfoRetentionDays = days;
         }
 
         private void chk_DebugMode_CheckedChanged(object sender, EventArgs e)
