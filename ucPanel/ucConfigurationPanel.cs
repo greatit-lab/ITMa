@@ -1,12 +1,13 @@
 // ucPanel\ucConfigurationPanel.cs
+using ITM_Agent.Properties;
 using ITM_Agent.Services;
 using System;
 using System.Collections.Generic;
 using System.Drawing;
 using System.IO;
 using System.Linq;
-using System.Windows.Forms;
 using System.Text.RegularExpressions;
+using System.Windows.Forms;
 
 namespace ITM_Agent.ucPanel
 {
@@ -99,7 +100,8 @@ namespace ITM_Agent.ucPanel
             }
             else
             {
-                lb_BaseFolder.Text = "폴더가 미선택되었습니다";
+                /* [삭제] lb_BaseFolder.Text = "폴더가 미선택되었습니다"; */
+                lb_BaseFolder.Text = Resources.MSG_BASE_NOT_SELECTED;   // [추가]
                 lb_BaseFolder.ForeColor = Color.Red;
             }
         }
@@ -400,7 +402,7 @@ namespace ITM_Agent.ucPanel
                     return parts.Length == 2 ? parts[1].Trim() : null;
                 })
                 .Where(folder => !string.IsNullOrWhiteSpace(folder))
-                .Distinct(StringComparer.OrdinalIgnoreCase)     // [추가] 대소문자 무시 중복 제거
+                .Distinct(StringComparer.OrdinalIgnoreCase)      // [추가] 대소문자 무시 중복 제거
                 .ToList();
         }   // GetRegexList() 끝
 
@@ -428,10 +430,10 @@ namespace ITM_Agent.ucPanel
             bool hasBase = (lb_BaseFolder.Text != "폴더가 미선택되었습니다"
                             && !string.IsNullOrEmpty(lb_BaseFolder.Text));
             bool hasRegex = (lb_RegexList.Items.Count > 0);
-        
+
             return hasTarget && hasBase && hasRegex;
         }
-        
+
         public string[] GetTargetFolders()
         {
             // lb_RegexList 항목은 "번호 regex -> targetFolder" 형식으로 되어 있다고 가정합니다.
