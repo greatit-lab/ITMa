@@ -98,8 +98,9 @@ namespace ITM_Agent
             btn_Run.Click += btn_Run_Click;
             btn_Stop.Click += btn_Stop_Click;
             // btn_Quit.Click += btn_Quit_Click;
-            
+
             UpdateUIBasedOnSettings();
+            infoCleaner = new InfoRetentionCleaner(settingsManager);
         }
         
         private void SetFormIcon()
