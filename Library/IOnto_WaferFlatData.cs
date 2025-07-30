@@ -408,7 +408,7 @@ namespace Onto_WaferFlatDataLib
                         {
                             tx.Rollback();
                             SimpleLogger.Debug($"Duplicate entry skipped ▶ {pex.Message}");
-                            SimpleLogger.Error(
+                            SimpleLogger.Event(
                                 $"동일한 데이터가 이미 등록되어 업로드가 생략되었습니다 ▶ {srcFile}");
                         }
                         /* ───── 기타 PostgreSQL 오류 ───── */
