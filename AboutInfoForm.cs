@@ -25,11 +25,11 @@ namespace ITM_Agent
             {
                 string path = Path.Combine(
                     Application.StartupPath, "Resources", "Icons", "icon.png");
-        
+
                 Image baseImg = File.Exists(path)
                     ? Image.FromFile(path)
                     : SystemIcons.Application.ToBitmap();
-        
+
                 picIcon.Image = ApplyOpacity(baseImg, 0.5f);    // 0~1, 값이 낮을수록 더 투명
             }
             catch
@@ -42,7 +42,7 @@ namespace ITM_Agent
         {
             // 32bpp ARGB 포맷으로 새 Bitmap 생성
             var bmp = new Bitmap(src.Width, src.Height, PixelFormat.Format32bppArgb);
-        
+
             using (Graphics g = Graphics.FromImage(bmp))
             {
                 var matrix = new ColorMatrix
@@ -51,7 +51,7 @@ namespace ITM_Agent
                 };
                 var attr = new ImageAttributes();
                 attr.SetColorMatrix(matrix, ColorMatrixFlag.Default, ColorAdjustType.Bitmap);
-        
+
                 g.DrawImage(src,
                     new Rectangle(0, 0, src.Width, src.Height),
                     0, 0, src.Width, src.Height,
