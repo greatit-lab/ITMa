@@ -42,6 +42,18 @@ namespace ITM_Agent.Services
             }
         }
 
+        public bool IsInfoDeletionEnabled
+        {
+            get => bool.TryParse(GetValueFromSection("InfoRetention", "AutoDelete"), out var b) && b;
+            set => SetValueToSection("InfoRetention", "AutoDelete", value.ToString());
+        }
+        
+        public int InfoRetentionDays
+        {
+            get => int.TryParse(GetValueFromSection("InfoRetention", "Days"), out var d) ? d : 1;
+            set => SetValueToSection("InfoRetention", "Days", value.ToString());
+        }
+
         public bool IsPerformanceLogging
         {
             get => isPerformanceLogging;
