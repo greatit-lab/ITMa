@@ -2,6 +2,7 @@
 using System;
 using System.Drawing;
 using System.Windows.Forms;
+using ITM_Agent.Properties;
 
 namespace ITM_Agent.ucPanel
 {
@@ -64,16 +65,20 @@ namespace ITM_Agent.ucPanel
         {
             if (string.IsNullOrWhiteSpace(RegexPattern))
             {
-                MessageBox.Show("정규표현식을 입력해주세요.", "경고", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                /* [삭제] MessageBox.Show("정규표현식을 입력해주세요.", "경고", ...); */
+                MessageBox.Show(Resources.MSG_REGEX_REQUIRED,             // [추가]
+                                Resources.CAPTION_WARNING,
+                                MessageBoxButtons.OK, MessageBoxIcon.Warning);
                 return;
             }
-
             if (string.IsNullOrWhiteSpace(TargetFolder))
             {
-                MessageBox.Show("복사 폴더를 선택해주세요.", "경고", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                /* [삭제] MessageBox.Show("복사 폴더를 선택해주세요.", "경고", ...); */
+                MessageBox.Show(Resources.MSG_FOLDER_REQUIRED,            // [추가]
+                                Resources.CAPTION_WARNING,
+                                MessageBoxButtons.OK, MessageBoxIcon.Warning);
                 return;
             }
-
             this.DialogResult = DialogResult.OK;
             this.Close();
         }
