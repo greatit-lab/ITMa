@@ -11,10 +11,10 @@ namespace ITM_Agent.ucPanel
     /// </summary>
     public partial class ucOptionPanel : UserControl
     {
-        private const string OptSection          = "Option";
-        private const string Key_PerfLog         = "EnablePerfoLog";
-        private const string Key_InfoAutoDel     = "EnableInfoAutoDel";
-        private const string Key_InfoRetention   = "InfoRetentionDays";
+        private const string OptSection = "Option";
+        private const string Key_PerfLog = "EnablePerfoLog";
+        private const string Key_InfoAutoDel = "EnableInfoAutoDel";
+        private const string Key_InfoRetention = "InfoRetentionDays";
 
         private readonly SettingsManager settingsManager;
 
@@ -26,20 +26,29 @@ namespace ITM_Agent.ucPanel
             InitializeComponent();
 
             /* 1) Retention 콤보박스 고정 값 • DropDownList */
-            cb_info_Retention.Items.Clear();                                       // [추가]
-            cb_info_Retention.Items.AddRange(new object[] { "1", "3", "5" });      // [추가]
-            cb_info_Retention.DropDownStyle = ComboBoxStyle.DropDownList;          // [추가]
+            cb_info_Retention.Items.Clear();
+            cb_info_Retention.Items.AddRange(new object[] { "1", "3", "5" });
+            cb_info_Retention.DropDownStyle = ComboBoxStyle.DropDownList;
     
             /* 2) UI 기본 비활성화 */
-            UpdateRetentionControls(false);                                        // [추가]
+            UpdateRetentionControls(false);
+    
+            /* Settings.ini ↔ UI 동기화 */
+            chk_infoDel.Checked = settingsManager.IsInfoDeletionEnabled;         // ← 새 프로퍼티
+            cb_info_Retention.Enabled = label3.Enabled = label4.Enabled = chk_infoDel.Checked;               // 초기 비활성 규칙
+            if (chk_infoDel.Checked)
+            {
+                string d = settingsManager.InfoRetentionDays.ToString();
+                cb_info_Retention.SelectedItem = cb_info_Retention.Items.Contains(d) ? d : "1";
+            }
     
             /* 3) 이벤트 연결 */
-            chk_PerfoMode.CheckedChanged += chk_PerfoMode_CheckedChanged;          // [추가]
-            chk_infoDel.CheckedChanged   += chk_infoDel_CheckedChanged;            // [추가]
-            cb_info_Retention.SelectedIndexChanged += cb_info_Retention_SelectedIndexChanged; // [추가]
+            chk_PerfoMode.CheckedChanged += chk_PerfoMode_CheckedChanged;
+            chk_infoDel.CheckedChanged += chk_infoDel_CheckedChanged;
+            cb_info_Retention.SelectedIndexChanged += cb_info_Retention_SelectedIndexChanged;
     
             /* 4) Settings.ini → UI 복원 */
-            LoadOptionSettings(); 
+            LoadOptionSettings();
         }
 
         private void LoadOptionSettings()
@@ -64,45 +73,46 @@ namespace ITM_Agent.ucPanel
             UpdateRetentionControls(infoDel);
         }
 
-        private void UpdateRetentionControls(bool enabled)                         // [추가]
+        private void UpdateRetentionControls(bool enabled)
         {
-            label3.Enabled           = enabled;
+            label3.Enabled = enabled;
             cb_info_Retention.Enabled = enabled;
-            label4.Enabled           = enabled;
-    
+            label4.Enabled = enabled;
+
             if (!enabled) cb_info_Retention.SelectedIndex = -1;  // 체크 해제 시 초기화
         }
 
-        private void chk_PerfoMode_CheckedChanged(object sender, EventArgs e)      // [수정]
+        private void chk_PerfoMode_CheckedChanged(object sender, EventArgs e)
         {
             bool enable = chk_PerfoMode.Checked;
-    
             PerformanceMonitor.Instance.StartSampling();
             PerformanceMonitor.Instance.SetFileLogging(enable);
     
-            settingsManager.IsPerformanceLogging = enable;                 // 기존 프로퍼티
-            settingsManager.SetValueToSection(OptSection,                  // INI 동기화
-                                              Key_PerfLog,
-                                              enable ? "1" : "0");         // [추가]
+            settingsManager.IsPerformanceLogging = enable;
         }
 
-        private void chk_infoDel_CheckedChanged(object sender, EventArgs e)        // [추가]
+        private void chk_infoDel_CheckedChanged(object sender, EventArgs e)
         {
-            bool enable = chk_infoDel.Checked;
-            UpdateRetentionControls(enable);
-    
-            settingsManager.SetValueToSection(OptSection, Key_InfoAutoDel, enable ? "1" : "0");
-    
-            if (!enable)
-                settingsManager.SetValueToSection(OptSection, Key_InfoRetention, ""); // Retention 초기화
+            bool enabled = chk_infoDel.Checked;
+
+            /* UI ↔ Settings */
+            settingsManager.IsInfoDeletionEnabled = enabled;
+            settingsManager.InfoRetentionDays =
+                enabled ? int.Parse(cb_info_Retention.SelectedItem?.ToString() ?? "1") : 0;
+        
+            /* 컨트롤 Enable */
+            cb_info_Retention.Enabled = label3.Enabled = label4.Enabled = enabled;
+        
+            /* 체크 시 기본 1 day 선택 */
+            if (enabled && cb_info_Retention.SelectedIndex < 0)
+                cb_info_Retention.SelectedItem = "1";
         }
 
-        private void cb_info_Retention_SelectedIndexChanged(object sender, EventArgs e) // [추가]
+        private void cb_info_Retention_SelectedIndexChanged(object s, EventArgs e)
         {
-            if (cb_info_Retention.SelectedItem is null) return;
-    
-            string days = cb_info_Retention.SelectedItem.ToString();
-            settingsManager.SetValueToSection(OptSection, Key_InfoRetention, days);
+            if (!chk_infoDel.Checked) return;
+            settingsManager.InfoRetentionDays =
+                int.Parse(cb_info_Retention.SelectedItem.ToString());
         }
 
         private void chk_DebugMode_CheckedChanged(object sender, EventArgs e)
