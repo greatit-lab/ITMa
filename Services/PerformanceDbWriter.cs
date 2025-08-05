@@ -84,17 +84,17 @@ namespace ITM_Agent.Services
                 buf.Clear();
             }
 
-            /* ② 커넥션 문자열 */
+            /* ② 연결 문자열 */
             string cs;
             try { cs = DatabaseInfo.CreateDefault().GetConnectionString(); }
             catch { logger.LogError("[Perf] ConnString 실패"); return; }
-        
+
             /* ③ 보정량 계산 */
             DateTime serverNow = DateTime.Now;
             DateTime tsMax = batch.Max(b => b.Timestamp);
-            TimeSpan diff = serverNow - tsMax;                       // 로컬 → 서버 차
-            TimeSyncProvider.SetDiff(eqpid, diff);
-        
+            TimeSpan diff = serverNow - tsMax;                    // 로컬→서버 차
+            TimeSyncProvider.Instance.UpdateDiff(diff);
+
             /* ④ 배치 INSERT */
             try
             {
@@ -127,7 +127,7 @@ namespace ITM_Agent.Services
                             /* ts (밀리초 절단) */
                             var ts = new DateTime(m.Timestamp.Year, m.Timestamp.Month, m.Timestamp.Day,
                                                   m.Timestamp.Hour, m.Timestamp.Minute, m.Timestamp.Second);
-                            pTs.Value  = ts;
+                            pTs.Value = ts;
 
                             /* serv_ts = ts + diff, 이후 밀리초 제거 ----------------------- */
                             var srv = TimeSyncProvider.Instance.Apply(ts);              // [추가] ts + diff
