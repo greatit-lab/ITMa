@@ -94,7 +94,6 @@ namespace ITM_Agent.Services
                         string imgPath = imagePaths[i];
                         try
                         {
-                            {
                             // ---------- 파일 스트림 잠김 방지 ----------
                             byte[] imgBytes = File.ReadAllBytes(imgPath);       // 추가
                             var imgData = ImageDataFactory.Create(imgBytes);    // (imgPath) 수정
