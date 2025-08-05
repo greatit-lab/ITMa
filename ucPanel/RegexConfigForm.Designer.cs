@@ -4,7 +4,7 @@ namespace ITM_Agent.ucPanel
     partial class RegexConfigForm
     {
         private System.ComponentModel.IContainer components = null;
-        
+
         protected override void Dispose(bool disposing)
         {
             if (disposing && (components != null))
@@ -13,7 +13,7 @@ namespace ITM_Agent.ucPanel
             }
             base.Dispose(disposing);
         }
-        
+
         private System.Windows.Forms.Button btn_RegSelectFolder;
         private System.Windows.Forms.Button btn_RegApply;
         private System.Windows.Forms.Label label1;
@@ -22,9 +22,9 @@ namespace ITM_Agent.ucPanel
         private System.Windows.Forms.Button btn_RegCancel;
         private System.Windows.Forms.Label label2;
         private System.Windows.Forms.Label label3;
-        
+
         #region 구성 요소 디자이너에서 생성한 코드
-        
+
         private void InitializeComponent()
         {
             this.btn_RegSelectFolder = new System.Windows.Forms.Button();
@@ -105,7 +105,7 @@ namespace ITM_Agent.ucPanel
             this.label3.TabIndex = 7;
             this.label3.Text = "▽▽▽▽";
             //
-            // ucScreen1_Reg
+            // RegexConfigForm
             //
             this.AutoScaleDimensions = new System.Drawing.SizeF(7F, 12F);
             this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.Font;
