@@ -35,8 +35,8 @@ namespace ITM_Agent
         private System.Windows.Forms.ToolStripMenuItem quitToolStripMenuItem;
         private System.Windows.Forms.ToolStripMenuItem tsm_OverrideNames;
         private System.Windows.Forms.ToolStripMenuItem tsm_ImageTrans;
-        private System.Windows.Forms.ToolStripMenuItem 도움말ToolStripMenuItem1;
-        private System.Windows.Forms.ToolStripMenuItem 내용ToolStripMenuItem1;
+        private System.Windows.Forms.ToolStripMenuItem tsm_About;
+        private System.Windows.Forms.ToolStripMenuItem tsm_AboutInfo;
         private System.Windows.Forms.SplitContainer splitContainer3;
         private System.Windows.Forms.Button btn_Quit;
         private System.Windows.Forms.Button btn_Stop;
@@ -93,8 +93,8 @@ namespace ITM_Agent
             this.toolStripMenuItem6 = new System.Windows.Forms.ToolStripMenuItem();
             this.tsm_Plugin = new System.Windows.Forms.ToolStripMenuItem();
             this.tsm_PluginList = new System.Windows.Forms.ToolStripMenuItem();
-            this.도움말ToolStripMenuItem1 = new System.Windows.Forms.ToolStripMenuItem();
-            this.내용ToolStripMenuItem1 = new System.Windows.Forms.ToolStripMenuItem();
+            this.tsm_About = new System.Windows.Forms.ToolStripMenuItem();
+            this.tsm_AboutInfo = new System.Windows.Forms.ToolStripMenuItem();
             this.newConfigurationToolStripMenuItem = new System.Windows.Forms.ToolStripMenuItem();
             this.toolStripSeparator1 = new System.Windows.Forms.ToolStripSeparator();
             this.settingsToolStripMenuItem = new System.Windows.Forms.ToolStripMenuItem();
@@ -123,7 +123,7 @@ namespace ITM_Agent
             this.statusStrip1.SuspendLayout();
             this.SuspendLayout();
             //
-            // menuStrip11
+            // menuStrip1
             //
             this.menuStrip1.Items.AddRange(new System.Windows.Forms.ToolStripItem[]
             {
@@ -132,7 +132,7 @@ namespace ITM_Agent
                 this.tsm_Onto,
                 this.tsm_Nova,
                 this.tsm_Plugin,
-                this.도움말ToolStripMenuItem1
+                this.tsm_About
             });
             this.menuStrip1.Location = new System.Drawing.Point(0, 0);
             this.menuStrip1.Name = "menuStrip1";
@@ -299,21 +299,21 @@ namespace ITM_Agent
             this.tsm_PluginList.Size = new System.Drawing.Size(130, 22);
             this.tsm_PluginList.Text = "Plugin List";
             //
-            // 도움말ToolStripMenuItem1
+            // tsm_About
             //
-            this.도움말ToolStripMenuItem1.DropDownItems.AddRange(new System.Windows.Forms.ToolStripItem[]
+            this.tsm_About.DropDownItems.AddRange(new System.Windows.Forms.ToolStripItem[]
             {
-                this.내용ToolStripMenuItem1
+                this.tsm_AboutInfo
             });
-            this.도움말ToolStripMenuItem1.Name = "도움말ToolStripMenuItem1";
-            this.도움말ToolStripMenuItem1.Size = new System.Drawing.Size(52, 20);
-            this.도움말ToolStripMenuItem1.Text = "About";
+            this.tsm_About.Name = "tsm_About";
+            this.tsm_About.Size = new System.Drawing.Size(52, 20);
+            this.tsm_About.Text = "About";
             //
-            // 내용ToolStripMenuItem1
+            // tsm_AboutInfo
             //
-            this.내용ToolStripMenuItem1.Name = "내용ToolStripMenuItem1";
-            this.내용ToolStripMenuItem1.Size = new System.Drawing.Size(146, 22);
-            this.내용ToolStripMenuItem1.Text = "Information...";
+            this.tsm_AboutInfo.Name = "tsm_AboutInfo";
+            this.tsm_AboutInfo.Size = new System.Drawing.Size(180, 22);
+            this.tsm_AboutInfo.Text = "Information...";
             //
             // newConfigurationToolStripMenuItem
             //
