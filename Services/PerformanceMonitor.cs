@@ -35,7 +35,7 @@ namespace ITM_Agent.Services
 
         private bool sampling;                 // 샘플러 실행 여부
         private bool fileLoggingEnabled;       // [추가] 파일 기록 여부
-    
+
         /*──────── 샘플링 ON ───────*/
         internal void StartSampling()
         {
@@ -43,7 +43,7 @@ namespace ITM_Agent.Services
             sampling = true;
             sampler.Start();
         }
-    
+
         /*──────── 샘플링 + 파일로깅 OFF ──*/
         internal void StopSampling()
         {
@@ -52,11 +52,11 @@ namespace ITM_Agent.Services
             DisableFileLogging();
             sampling = false;
         }
-    
+
         /*──────── 파일 로깅 ON/OFF API ──*/
         internal void SetFileLogging(bool enable) =>
             (enable ? (Action)EnableFileLogging : DisableFileLogging)();
-    
+
         /*──────── 내부 구현 ─────────*/
         private void EnableFileLogging()
         {
@@ -65,7 +65,7 @@ namespace ITM_Agent.Services
             flushTimer.Change(FLUSH_INTERVAL_MS, FLUSH_INTERVAL_MS);
             fileLoggingEnabled = true;
         }
-    
+
         private void DisableFileLogging()
         {
             if (!fileLoggingEnabled) return;
@@ -73,14 +73,14 @@ namespace ITM_Agent.Services
             FlushToFile();                       // 남은 버퍼 기록 후 off
             fileLoggingEnabled = false;
         }
-    
+
         //──────────────── Consumers Registration ────────────────
         // 외부(Batch Writer 등)가 Metric 샘플을 구독/해제할 수 있는 공개 메서드
         internal void RegisterConsumer(Action<Metric> consumer)
         {
             sampler.OnSample += consumer;
         }
-    
+
         internal void UnregisterConsumer(Action<Metric> consumer)
         {
             sampler.OnSample -= consumer;
@@ -141,13 +141,13 @@ namespace ITM_Agent.Services
         private void FlushToFile()
         {
             if (!fileLoggingEnabled || buffer.Count == 0) return;
-        
+
             string fileName = $"{DateTime.Now:yyyyMMdd}_performance.log";
             string filePath = Path.Combine(GetLogDir(), fileName);
-        
+
             /*── ① 5 MB 초과 시 회전 ───────────────────────────────────────────────*/
             RotatePerfLogIfNeeded(filePath);    // [추가]
-        
+
             /*── ② 실제 쓰기 ────────────────────────────────────────────────────*/
             using (var fs = new FileStream(filePath, FileMode.OpenOrCreate,
                                            FileAccess.Write, FileShare.ReadWrite))
@@ -171,11 +171,11 @@ namespace ITM_Agent.Services
         {
             var fi = new FileInfo(filePath);
             if (!fi.Exists || fi.Length <= MAX_LOG_SIZE) return;  // 5 MB 이하 → 그대로
-        
+
             string extension = fi.Extension;                          // ".log"
             string baseName = Path.GetFileNameWithoutExtension(filePath); // "20250728_performance"
             string dir = fi.DirectoryName;
-        
+
             int index = 1;
             string rotatedPath;
             do
@@ -185,7 +185,7 @@ namespace ITM_Agent.Services
                 index++;
             }
             while (File.Exists(rotatedPath));                          // 중복 방지
-        
+
             File.Move(filePath, rotatedPath);                          // 회전 완료
         }
 
