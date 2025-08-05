@@ -1,4 +1,4 @@
-//ucPanel\RegexConfigForm.Designer.cs
+// ucPanel\RegexConfigForm.Designer.cs
 namespace ITM_Agent.ucPanel
 {
     partial class RegexConfigForm
