@@ -19,7 +19,7 @@ namespace ITM_Agent.Services
         /* ★ 추가 : 모든 인스턴스에서 공유하는 Debug 전역 플래그           */
         /* ────────────────────────────────────────────────────────────── */
         private static volatile bool _globalDebugEnabled = false;
-        public  static bool  GlobalDebugEnabled          // MainForm 등에서 ON/OFF
+        public static bool GlobalDebugEnabled          // MainForm 등에서 ON/OFF
         {
             get => _globalDebugEnabled;
             set => _globalDebugEnabled = value;
@@ -80,7 +80,7 @@ namespace ITM_Agent.Services
         {
             if (!GlobalDebugEnabled) return;          // Debug OFF → 바로 반환
 
-            string ts  = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss.fff");
+            string ts = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss.fff");
             string log = $"{ts} [Debug] {message}";
             string fileName = $"{DateTime.Now:yyyyMMdd}_debug.log";
 
@@ -103,12 +103,12 @@ namespace ITM_Agent.Services
         private void WriteLogWithRotation(string message, string fileName)
         {
             string filePath = Path.Combine(logFolderPath, fileName);
-        
+
             try
             {
                 // (1) 5 MB 초과 시 회전
                 RotateLogFileIfNeeded(filePath);
-        
+
                 // (2) FileShare.ReadWrite 로 열기  ➜  다른 쓰기 스트림과 공존
                 const int MAX_RETRY = 3;
                 for (int attempt = 1; attempt <= MAX_RETRY; attempt++)
@@ -147,17 +147,17 @@ namespace ITM_Agent.Services
         {
             if (!File.Exists(filePath))
                 return;
-        
+
             FileInfo fi = new FileInfo(filePath);
-        
+
             // (1) 5 MB 이하이면 그대로 사용
             if (fi.Length <= MAX_LOG_SIZE)
                 return;
-        
+
             // (2) 확장자 / 기본 이름 분리
-            string extension   = fi.Extension;                               // ".log"
-            string withoutExt  = Path.GetFileNameWithoutExtension(filePath); // "20250711_event"
-        
+            string extension = fi.Extension;                               // ".log"
+            string withoutExt = Path.GetFileNameWithoutExtension(filePath); // "20250711_event"
+
             // (3) 다음 회전 인덱스 계산
             int index = 1;
             string rotatedPath;
@@ -168,10 +168,10 @@ namespace ITM_Agent.Services
                 index++;
             }
             while (File.Exists(rotatedPath));  // 존재하는 파일이 없을 때까지 증가
-        
+
             // (4) 원본 → 새 인덱스 파일로 이동
             File.Move(filePath, rotatedPath);
-        
+
             // (5) 이후 WriteLogWithRotation() 가 호출되면서
             //     같은 이름의 새로운 원본 로그(0번) 파일이 자동 생성되어
             //     이어서 로그가 기록됨.
