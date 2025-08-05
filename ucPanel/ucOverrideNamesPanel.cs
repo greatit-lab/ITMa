@@ -418,8 +418,7 @@ namespace ITM_Agent.ucPanel
 
             if (lb_TargetComparePath.SelectedItems.Count > 0)
             {
-                var confirmResult = MessageBox.Show("선택한 항목을 삭제하시겠습니까?", "삭제 확인", 
-                                                    MessageBoxButtons.YesNo, MessageBoxIcon.Warning);
+                var confirmResult = MessageBox.Show("선택한 항목을 삭제하시겠습니까?", "삭제 확인", MessageBoxButtons.YesNo, MessageBoxIcon.Warning);
 
                 if (confirmResult == DialogResult.Yes)
                 {
@@ -494,13 +493,13 @@ namespace ITM_Agent.ucPanel
 
                 // 빈 .info 파일 생성
                 using (File.Create(newFilePath)) { }
-                
+
                 // 성공 시 경로 반환
                 return newFilePath;
             }
             catch (IOException ioEx) when (ioEx.Message.Contains("다른 프로세스에서 사용 중"))
             {
-                if (settingsManager. IsDebugMode)
+                if (settingsManager.IsDebugMode)
                 {
                     // 잠금 충돌은 Debug 레벨로만 기록
                     logManager.LogDebug($"[ucOverrideNamesPanel] 잠금 충돌: {System.IO.Path.GetFileName(filePath)} - 재시도 예정.");
@@ -511,7 +510,7 @@ namespace ITM_Agent.ucPanel
             {
                 // 이 외의 진짜 실패는 Error 레벨로 기록
                 logManager.LogError($"[ucOverrideNamesPanel] .info 파일 생성 실패: {ex.Message}\n대상 파일: {filePath}");
-                return null;                                                                                                                                                                                                         
+                return null;
             }
         }
 
@@ -519,7 +518,7 @@ namespace ITM_Agent.ucPanel
         {
             try
             {
-                using (var stream = new FileStream(filePath, FileMode.Open, FileAccess.Read, 
+                using (var stream = new FileStream(filePath, FileMode.Open, FileAccess.Read,
                                                    FileShare.ReadWrite | FileShare.Delete))
                 {
                     return true; // 파일에 액세스 가능
@@ -565,7 +564,7 @@ namespace ITM_Agent.ucPanel
             string datePattern = @"Date and Time:\s*(\d{2}/\d{2}/\d{4} \d{2}:\d{2}:\d{2} (AM|PM))";
             const int maxRetries = 5;
             const int delayMs = 1000;
-            
+
             if (settingsManager.IsDebugMode)
             {
                 // Debug Log
@@ -618,38 +617,38 @@ namespace ITM_Agent.ucPanel
                 baselineWatcher.Dispose();
                 baselineWatcher = null;
             }
-            
+
             if (settingsManager.IsDebugMode)
             {
                 logManager.LogDebug("[ucOverrideNamesPanel] InitializeBaselineWatcher() 호출");
             }
-        
+
             var baseFolder = settingsManager.GetFoldersFromSection("[BaseFolder]").FirstOrDefault();
             if (string.IsNullOrEmpty(baseFolder) || !Directory.Exists(baseFolder))
             {
                 logManager.LogError("[ucOverrideNamesPanel] 유효하지 않은 BaseFolder로 인해 BaselineWatcher 초기화 불가");
                 return;
             }
-        
+
             var baselineFolder = Path.Combine(baseFolder, "Baseline");
             if (!Directory.Exists(baselineFolder))
             {
                 logManager.LogError("[ucOverrideNamesPanel] Baseline 폴더가 존재하지 않아 BaselineWatcher 초기화 불가");
                 return;
             }
-        
+
             baselineWatcher = new FileSystemWatcher(baselineFolder, "*.info")
             {
                 NotifyFilter = NotifyFilters.FileName | NotifyFilters.LastWrite
             };
-        
+
             baselineWatcher.Created += OnBaselineFileChanged;
             baselineWatcher.Changed += OnBaselineFileChanged;
             baselineWatcher.EnableRaisingEvents = true;
-        
+
             logManager.LogEvent($"[ucOverrideNamesPanel] BaselineWatcher 초기화 완료 - 경로: {baselineFolder}");
         }
-        
+
         private void OnBaselineFileChanged(object sender, FileSystemEventArgs e)
         {
             if (settingsManager.IsDebugMode)
@@ -755,8 +754,9 @@ namespace ITM_Agent.ucPanel
             // 파일이 준비될 때까지 대기
             if (!WaitForFileReady(targetFile, maxRetries: 5, delayMilliseconds: 200))
                 return null;
-            
+
             string fileName = System.IO.Path.GetFileName(targetFile);
+
             foreach (var data in baselineData.Values)
             {
                 if (fileName.Contains(data.TimeInfo) && fileName.Contains(data.Prefix))
@@ -765,6 +765,7 @@ namespace ITM_Agent.ucPanel
                     if (newName.Equals(fileName, StringComparison.Ordinal))
                         return null;  // 이미 변경된 상태
                     string newPath = System.IO.Path.Combine(System.IO.Path.GetDirectoryName(targetFile), newName);
+
                     try
                     {
                         File.Move(targetFile, newPath);
@@ -773,7 +774,7 @@ namespace ITM_Agent.ucPanel
                     }
                     catch (FileNotFoundException fnfEx)
                     {
-                        // 파일이 이미 없어진 경우: 완전 실패 아님 -> Debug 로그로만 기록
+                        // 파일이 이미 없어진 경우: 완전 실패 아님 → Debug 로그로만 기록
                         if (settingsManager.IsDebugMode)
                         {
                             logManager.LogDebug($"[ucOverrideNamesPanel] 파일 이름 변경 실패(파일 없음): {fileName}. 이유: {fnfEx.Message}");
@@ -797,7 +798,7 @@ namespace ITM_Agent.ucPanel
                     }
                 }
             }
-            
+
             // 패턴 불일치로 처리 대상이 아니면 null
             return null;
         }
@@ -863,7 +864,7 @@ namespace ITM_Agent.ucPanel
         {
             bool isRunning = status == "Running...";
             SetControlEnabled(!isRunning);
-            
+
             if (isDebugMode)
             {
                 // Debug Log
@@ -873,7 +874,6 @@ namespace ITM_Agent.ucPanel
 
         public void CompareAndRenameFiles()
         {
-            // Debug Log
             logManager.LogDebug("[ucOverrideNamesPanel] CompareAndRenameFiles() 호출");
 
             try
@@ -903,13 +903,13 @@ namespace ITM_Agent.ucPanel
                     {
                         string newFileName = ProcessTargetFile(targetFile, baselineData);
                         if (string.IsNullOrEmpty(newFileName))
-                            continue; // 변경 불필요 또는 패턴 불일치
+                            continue;  // 변경 불필요 또는 패턴 불일치
                         
                         string originalName = Path.GetFileName(targetFile);
                         // 안전장치: 동일 이름 재이동 방지
                         if (newFileName.Equals(originalName, StringComparison.Ordinal))
                             continue;
-                        
+
                         string newFilePath = Path.Combine(targetFolder, newFileName);
                         File.Move(targetFile, newFilePath);
                         LogFileRename(targetFile, newFilePath);
@@ -954,18 +954,18 @@ namespace ITM_Agent.ucPanel
             base.Dispose(disposing);
         }
         #endregion
-        
+
         public string EnsureOverrideAndReturnPath(string originalPath, int timeoutMs = 180_000)
         {
             var sw = System.Diagnostics.Stopwatch.StartNew();
-        
+
             // (1) Baseline 폴더 및 검색 패턴
             string baselineFolder = Path.Combine(settingsManager.GetBaseFolder(), "Baseline");
             string waferId = Path.GetFileNameWithoutExtension(originalPath).Split('_').First(); // PSD276.1
             string pat = $"{waferId}*.info";                                                   // PSD276.1*.info
-        
+
             string infoPath = null;
-        
+
             // (2) 지정 시간(timeoutMs) 동안 .info 도착 대기
             while (sw.ElapsedMilliseconds < timeoutMs)
             {
@@ -977,36 +977,36 @@ namespace ITM_Agent.ucPanel
                 }
                 System.Threading.Thread.Sleep(300);
             }
-        
+
             // (3) .info 없으면 rename skip → 원본 경로 반환
             if (infoPath == null)
             {
                 logManager.LogDebug($"[Override] .info 미발견, rename skip : {originalPath}");
                 return originalPath;
             }
-        
+
             // (4) .info 찾았으면 rename 시도
             string renamed = TryRenameTargetFile(originalPath, infoPath);
             return string.IsNullOrEmpty(renamed) ? originalPath : renamed;
         }
-        
+
         private string TryRenameTargetFile(string srcPath, string infoPath)
         {
             if (string.IsNullOrEmpty(infoPath))
                 return null;                                  // 방어 코드
-        
+
             try
             {
                 // ExtractBaselineData() 가 string[] 파라미터를 요구하므로 래핑
                 var baselineData = ExtractBaselineData(new[] { infoPath });
-        
+
                 // “_#1_” → “_C3W1_” 등, 실제 새 파일명 계산
                 string newName = ProcessTargetFile(srcPath, baselineData);
-        
+
                 if (!string.IsNullOrEmpty(newName))
                 {
                     string dst = Path.Combine(Path.GetDirectoryName(srcPath), newName);
-        
+
                     if (!File.Exists(dst))
                     {
                         File.Move(srcPath, dst);              // rename 실행
@@ -1019,7 +1019,6 @@ namespace ITM_Agent.ucPanel
             {
                 logManager.LogError($"[Override] Rename 실패: {ex.Message}");
             }
-        
             return null;                                      // 대상 파일 없음 → skip
         }
     }
