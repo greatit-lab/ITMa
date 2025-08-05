@@ -16,8 +16,9 @@ namespace ITM_Agent.Services
         private readonly LogManager log;
         private readonly Timer timer;
         private static readonly Regex TsRegex = new Regex(@"^(?<ts>\d{8}_\d{6})_", RegexOptions.Compiled);
+
         //private const int SCAN_INTERVAL_MS = 60 * 60 * 1000; // 1 시간
-        private const int SCAN_INTERVAL_MS = 2 * 60 * 1000;   // Test
+        private const int SCAN_INTERVAL_MS = 5 * 60 * 1000;   // Test
 
         public InfoRetentionCleaner(SettingsManager settingsManager)
         {
@@ -32,28 +33,28 @@ namespace ITM_Agent.Services
             if (!settings.IsInfoDeletionEnabled) return;
             int days = settings.InfoRetentionDays;
             if (days <= 0) return;
-        
-            string baseFolder  = settings.GetBaseFolder();
+
+            string baseFolder = settings.GetBaseFolder();
             if (string.IsNullOrEmpty(baseFolder)) return;
             string baselineDir = Path.Combine(baseFolder, "Baseline");
             if (!Directory.Exists(baselineDir)) return;
-        
+
             DateTime now = DateTime.Now;
-        
+
             foreach (string file in Directory.GetFiles(baselineDir, "*.info"))
             {
                 string name = Path.GetFileName(file);
-                Match  m    = TsRegex.Match(name);
+                Match m = TsRegex.Match(name);
                 if (!m.Success) continue;
-        
+
                 if (!DateTime.TryParseExact(m.Groups["ts"].Value,
                                             "yyyyMMdd_HHmmss",
                                             CultureInfo.InvariantCulture,
                                             DateTimeStyles.None,
                                             out DateTime ts)) continue;
-        
+
                 if ((now - ts).TotalDays < days) continue;
-        
+
                 /* ───────── 파일 삭제 로직 ───────── */
                 bool deleted = false;                                              // [추가]
                 try
@@ -63,12 +64,12 @@ namespace ITM_Agent.Services
                         log.LogEvent($"[InfoCleaner] Skip (not found): {name}");   // [수정]
                         continue;
                     }
-        
+
                     /* 읽기 전용 해제 시도 */
                     var attrs = File.GetAttributes(file);                          // [추가]
                     if ((attrs & FileAttributes.ReadOnly) != 0)                    // [추가]
                         File.SetAttributes(file, attrs & ~FileAttributes.ReadOnly);// [추가]
-        
+
                     File.Delete(file);                                             // [수정]
                     deleted = true;                                                // [추가]
                 }
@@ -95,12 +96,13 @@ namespace ITM_Agent.Services
                 {
                     log.LogError($"[InfoCleaner] Delete fail {name} → {ex.Message}");
                 }
-        
+
                 /* 최종 결과 기록 */
                 if (deleted)
                     log.LogEvent($"[InfoCleaner] Deleted: {name}");                // [추가]
             }
         }
+
         public void Dispose() => timer?.Dispose();
     }
 }
