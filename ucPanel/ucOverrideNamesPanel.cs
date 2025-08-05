@@ -17,7 +17,7 @@ namespace ITM_Agent.ucPanel
         private readonly ucConfigurationPanel configPanel;
         private readonly LogManager logManager;
         private readonly bool isDebugMode;
-        
+
         private FileSystemWatcher folderWatcher;   // 폴더 감시기
         private List<string> regexFolders;         // 정규표현식과 폴더 정보 저장
         private string baseFolder;                 // BaseFolder 저장
@@ -36,26 +36,29 @@ namespace ITM_Agent.ucPanel
         public ucOverrideNamesPanel(SettingsManager settingsManager, ucConfigurationPanel configPanel, LogManager logManager, bool isDebugMode)
         {
             // 필수 인자 null 체크
-            this.settingsManager = settingsManager ?? throw new ArgumentNullException(nameof(settingsManager));
-            this.configPanel = configPanel ?? throw new ArgumentNullException(nameof(configPanel));
-            this.logManager = logManager ?? throw new ArgumentNullException(nameof(logManager));
+            this.settingsManager = settingsManager
+                ?? throw new ArgumentNullException(nameof(settingsManager));
+            this.configPanel = configPanel
+                ?? throw new ArgumentNullException(nameof(configPanel));
+            this.logManager = logManager
+                ?? throw new ArgumentNullException(nameof(logManager));
             this.isDebugMode = isDebugMode;
-            
+
             InitializeComponent();
             this.settingsManager = settingsManager;
             this.logManager = logManager;
             this.isDebugMode = isDebugMode;
-            
+
             this.settingsManager = settingsManager ?? throw new ArgumentNullException(nameof(settingsManager));
             this.configPanel = configPanel ?? throw new ArgumentNullException(nameof(configPanel));
-            
+
             string baseDir = AppDomain.CurrentDomain.BaseDirectory;
             logManager = new LogManager(baseDir);
 
             if (settingsManager.IsDebugMode)
             {
                 // Debug Log 예시
-                logManager.LogDebug("[ucOverrideNamesPanel] 생성자 호출 - 초기화 시작"); 
+                logManager.LogDebug("[ucOverrideNamesPanel] 생성자 호출 - 초기화 시작");
             }
 
             InitializeBaselineWatcher();
@@ -65,7 +68,7 @@ namespace ITM_Agent.ucPanel
             LoadDataFromSettings();
             LoadRegexFolderPaths(); // 초기화 시 목록 로드
             LoadSelectedBaseDatePath(); // 저장된 선택 값 불러오기
-            
+
             if (settingsManager.IsDebugMode)
             {
                 // Debug Log 예시
@@ -165,10 +168,10 @@ namespace ITM_Agent.ucPanel
                     {
                         // 파일명만 추출
                         string fileName = Path.GetFileName(filePath);
-                        
+
                         // Baseline .info 파일 생성
                         string infoPath = CreateBaselineInfoFile(filePath, dateTimeInfo.Value);
-                        
+
                         if (!string.IsNullOrEmpty(infoPath))
                         {
                             // 감지 및 생성 성공을 한 줄로 기록
@@ -246,7 +249,7 @@ namespace ITM_Agent.ucPanel
                 .Values
                 .Distinct(StringComparer.OrdinalIgnoreCase)        // [추가] 중복 제거
                 .ToArray();
-        
+
             cb_BaseDatePath.Items.AddRange(folderPaths);          // [수정]
             cb_BaseDatePath.SelectedIndex = -1; // 초기화
 
@@ -279,7 +282,7 @@ namespace ITM_Agent.ucPanel
             {
                 settingsManager.SetValueToSection("SelectedBaseDatePath", "Path", selectedPath);
                 StartFolderWatcher(selectedPath);
-                
+
                 if (settingsManager.IsDebugMode)
                 {
                     // Debug Log
@@ -459,15 +462,15 @@ namespace ITM_Agent.ucPanel
                 // Debug: 메서드 호출
                 logManager.LogDebug($"[ucOverrideNamesPanel] CreateBaselineInfoFile() 호출 - 대상: {Path.GetFileName(filePath)}");
             }
-            
+
             // 기준 폴더 유효성 검사
-            string baseFolder = configPanel.BaseFolderPath; 
+            string baseFolder = configPanel.BaseFolderPath;
             if (string.IsNullOrEmpty(baseFolder) || !Directory.Exists(baseFolder))
             {
                 logManager.LogError("[ucOverrideNamesPanel] 기준 폴더가 설정되지 않았거나 존재하지 않습니다.");
                 return null;
             }
-            
+
             // Baseline 폴더 경로 준비
             string baselineFolder = System.IO.Path.Combine(baseFolder, "Baseline");
             if (!Directory.Exists(baselineFolder))
@@ -475,12 +478,12 @@ namespace ITM_Agent.ucPanel
                 Directory.CreateDirectory(baselineFolder);
                 logManager.LogEvent($"[ucOverrideNamesPanel] Baseline 폴더 생성: {baselineFolder}");
             }
-            
+
             // 새로운 .info 파일명 생성
             string originalName = System.IO.Path.GetFileNameWithoutExtension(filePath);
             string newFileName = $"{dateTime:yyyyMMdd_HHmmss}_{originalName}.info";
             string newFilePath = System.IO.Path.Combine(baselineFolder, newFileName);
-        
+
             try
             {
                 // 파일 잠김 해제 확인을 위해 읽기 시도
@@ -488,7 +491,7 @@ namespace ITM_Agent.ucPanel
                 {
                     // 테스트 용도로만 열고 바로 닫습니다.
                 }
-        
+
                 // 빈 .info 파일 생성
                 using (File.Create(newFilePath)) { }
                 
