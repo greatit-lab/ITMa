@@ -146,7 +146,7 @@ namespace ITM_Agent.Services
                         insCmd.Parameters.AddWithValue("@tz", timeZone);
                         insCmd.Parameters.AddWithValue("@app_ver", appVersion);
                         //insCmd.Parameters.AddWithValue("@pc_now", pcNow);
-                        insCmd.Parameters.Add("@pc_now",NpgsqlTypes.NpgsqlDbType.Timestamp).Value = pcNow;
+                        insCmd.Parameters.Add("@pc_now", NpgsqlTypes.NpgsqlDbType.Timestamp).Value = pcNow;
     
                         int rows = insCmd.ExecuteNonQuery();
                         logManager.LogEvent($"[EqpidManager] DB 업로드 완료. (rows inserted/updated={rows})");
