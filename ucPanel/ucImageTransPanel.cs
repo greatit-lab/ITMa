@@ -36,7 +36,7 @@ namespace ITM_Agent.ucPanel
             this.configPanel = configPanel ?? throw new ArgumentNullException(nameof(configPanel));
             InitializeComponent();
 
-            logManager = new LogManager(AppDomain.CurrentDomain.BaseDirectory); 
+            logManager = new LogManager(AppDomain.CurrentDomain.BaseDirectory);
             pdfMergeManager = new PdfMergeManager(AppDomain.CurrentDomain.BaseDirectory, logManager);
 
             logManager.LogEvent("[ucImageTransPanel] Initialized");
@@ -98,7 +98,7 @@ namespace ITM_Agent.ucPanel
             imageWatcher = new FileSystemWatcher()
             {
                 Path = targetFolder,
-                Filter = "*.*", 
+                Filter = "*.*",
                 NotifyFilter = NotifyFilters.FileName | NotifyFilters.LastWrite,
                 IncludeSubdirectories = false
             };
@@ -140,12 +140,12 @@ namespace ITM_Agent.ucPanel
         private void OnImageFileChanged(object sender, FileSystemEventArgs e)
         {
             if (!isRunning) return;
-            
+
             // 폴더 / 임시파일 등 스킵
             if (!File.Exists(e.FullPath)) return;
-            
+
             string fileNameWithoutExt = Path.GetFileNameWithoutExtension(e.FullPath);
-            
+
             // 1) _#1_ 이 들어있으면 무시
             if (fileNameWithoutExt.Contains("_#1_"))
             {
@@ -242,6 +242,7 @@ namespace ITM_Agent.ucPanel
         {
             // cb_WaitTime 또는 settingsManager "ImageTrans/Wait" 설정값
             string waitStr = settingsManager.GetValueFromSection("ImageTrans", "Wait");
+
             if (cb_WaitTime.InvokeRequired)
             {
                 cb_WaitTime.Invoke(new MethodInvoker(delegate
@@ -259,7 +260,7 @@ namespace ITM_Agent.ucPanel
                     waitStr = sel;
                 }
             }
-        
+
             if (int.TryParse(waitStr, out int ws))
             {
                 return ws;
@@ -277,11 +278,11 @@ namespace ITM_Agent.ucPanel
             string fnNoExt = Path.GetFileNameWithoutExtension(filePath);
             var m0 = Regex.Match(fnNoExt, @"^(?<base>.+)_(?<page>\d+)$");
             if (!m0.Success) return;                 // 패턴 미일치 → 무시
-        
-            string baseName      = m0.Groups["base"].Value;   // 예) 20250728_…_CELL       /* 기존 */
-            string safeBaseName  = baseName.Replace('.', '_'); // [추가] 파일명에 포함된 ‘.’ → ‘_’ 치환
-            string folder        = Path.GetDirectoryName(filePath);
-        
+
+            string baseName = m0.Groups["base"].Value;   // 예) 20250728_…_CELL       /* 기존 */
+            string safeBaseName = baseName.Replace('.', '_'); // [추가] 파일명에 포함된 ‘.’ → ‘_’ 치환
+            string folder = Path.GetDirectoryName(filePath);
+
             // 0-1) 이미 병합된 baseName 은 SKIP
             lock (mergedBaseNames)
             {
@@ -293,7 +294,7 @@ namespace ITM_Agent.ucPanel
                 }
                 mergedBaseNames.Add(baseName);
             }
-        
+
             // 1) 병합 대상 이미지 수집
             string[] exts = { ".jpg", ".jpeg", ".png", ".tif", ".tiff" };
             var imgList = Directory.GetFiles(folder, "*.*", SearchOption.TopDirectoryOnly)
@@ -310,14 +311,14 @@ namespace ITM_Agent.ucPanel
                                    .OrderBy(x => x.page)
                                    .Select(x => x.path)
                                    .ToList();
-        
+
             if (imgList.Count == 0)
             {
                 if (settingsManager.IsDebugMode)
                     logManager.LogDebug($"[ucImageTransPanel] No images found for base '{baseName}'.");
                 return;
             }
-        
+
             // 2) PDF 출력 폴더 결정
             string outputFolder = settingsManager.GetValueFromSection("ImageTrans", "SaveFolder");
             if (string.IsNullOrEmpty(outputFolder) || !Directory.Exists(outputFolder))
@@ -325,12 +326,12 @@ namespace ITM_Agent.ucPanel
                 outputFolder = folder;  // [수정] 설정이 없거나 존재하지 않으면 이미지 폴더 사용
                 logManager.LogEvent("[ucImageTransPanel] SaveFolder 미설정/미존재 ▶ 이미지 폴더로 대체 저장");
             }
-        
+
             string outputPdfPath = Path.Combine(outputFolder, $"{safeBaseName}.pdf"); // [수정] safeBaseName 사용
-        
+
             // 3) PDF 병합 실행 (MergeImagesToPdf 내부에서 이미지 삭제)
             pdfMergeManager.MergeImagesToPdf(imgList, outputPdfPath);
-        
+
             logManager.LogEvent($"[ucImageTransPanel] Created PDF: {outputPdfPath}");
         }
 
@@ -406,9 +407,9 @@ namespace ITM_Agent.ucPanel
             var uniqueFolders = regexFolders
                 .Distinct(StringComparer.OrdinalIgnoreCase)       // [추가]
                 .ToArray();
-        
+
             cb_TargetImageFolder.Items.AddRange(uniqueFolders);   // [수정]
-            
+
             string selectedPath = settingsManager.GetValueFromSection("ImageTrans", "Target");
             if (!string.IsNullOrEmpty(selectedPath) && cb_TargetImageFolder.Items.Contains(selectedPath))
             {
