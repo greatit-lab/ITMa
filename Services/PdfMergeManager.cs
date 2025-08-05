@@ -18,6 +18,7 @@ namespace ITM_Agent.Services
         private readonly LogManager logManager; // 로깅 관리자
         private string _outputFolder;
         private readonly bool isDebugMode;
+
         private string OutputFolder
         {
             get => _outputFolder;
@@ -75,15 +76,15 @@ namespace ITM_Agent.Services
                     logManager.LogEvent($"[PdfMergeManager] Created directory: {pdfDirectory}");
                 }
 
-                string fileName   = IOPath.GetFileName(outputPdfPath);          // ← IOPath 사용
-                int    imageCount = imagePaths.Count;
+                string fileName = IOPath.GetFileName(outputPdfPath);          // ← IOPath 사용
+                int imageCount = imagePaths.Count;
 
                 logManager.LogEvent($"[PdfMergeManager] Starting MergeImagesToPdf. " +
                                     $"Output: {fileName}, Images: {imageCount}");
 
                 // ── 2) PDF 생성 ────────────────────────────────────────────
-                using (var writer   = new PdfWriter(outputPdfPath))
-                using (var pdfDoc   = new PdfDocument(writer))
+                using (var writer = new PdfWriter(outputPdfPath))
+                using (var pdfDoc = new PdfDocument(writer))
                 using (var document = new Document(pdfDoc))
                 {
                     document.SetMargins(0, 0, 0, 0);
@@ -95,7 +96,7 @@ namespace ITM_Agent.Services
                         {
                             {
                             // ---------- 파일 스트림 잠김 방지 ----------
-                            byte[] imgBytes = File.ReadAllBytes(imgPath);           // 추가
+                            byte[] imgBytes = File.ReadAllBytes(imgPath);       // 추가
                             var imgData = ImageDataFactory.Create(imgBytes);    // (imgPath) 수정
                             var img = new Image(imgData);
                             float w = img.GetImageWidth(), h = img.GetImageHeight();
@@ -136,9 +137,9 @@ namespace ITM_Agent.Services
                         delFail++;
                     }
                 }
-        
+
                 logManager.LogEvent($"[PdfMergeManager] Merge completed. " +
-                                    $"Images merged: {imagePaths.Count}, deleted: {delOk}, delete-failed: {delFail}");
+                            $"Images merged: {imagePaths.Count}, deleted: {delOk}, delete-failed: {delFail}");
             }
             catch (Exception ex)
             {
@@ -146,7 +147,7 @@ namespace ITM_Agent.Services
                 throw;  // 상위 호출부로 재전달
             }
         }
-        
+
         /* ===================== [추가] 헬퍼 메서드 ===================== */
         /// <summary>
         /// 파일 잠김 문제를 고려해 삭제를 재시도한다.
