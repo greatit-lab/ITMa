@@ -404,7 +404,7 @@ namespace ITM_Agent.ucPanel
                 .Where(folder => !string.IsNullOrWhiteSpace(folder))
                 .Distinct(StringComparer.OrdinalIgnoreCase)      // [추가] 대소문자 무시 중복 제거
                 .ToList();
-        }   // GetRegexList() 끝
+        }  // GetRegexList() 끝
 
         public void InitializePanel(bool isRunning)
         {
