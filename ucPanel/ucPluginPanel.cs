@@ -233,7 +233,7 @@ namespace ITM_Agent.ucPanel
                     /* ③ DLL 메모리 로드 → 파일 잠금 방지 */
                     byte[] dllBytes = File.ReadAllBytes(assemblyPath);
                     Assembly asm = Assembly.Load(dllBytes);
-        
+
                     /* ④ 어셈블리 메타데이터 추출 */
                     string asmName = asm.GetName().Name;              // 실제 어셈블리 이름
                     string asmVersion = asm.GetName().Version.ToString();// 버전 문자열
