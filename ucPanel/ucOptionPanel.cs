@@ -108,10 +108,7 @@ namespace ITM_Agent.ucPanel
 
             /* 라벨은 Run 상태 무관, 오직 chk_infoDel 체크 여부로만 활성화 */
             label3.Enabled = label4.Enabled = chk_infoDel.Checked;
-
-            //if (!enableCombo) cb_info_Retention.SelectedIndex = -1;
         }
-
 
         private void chk_PerfoMode_CheckedChanged(object sender, EventArgs e)
         {
