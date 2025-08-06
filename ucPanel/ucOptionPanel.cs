@@ -11,6 +11,7 @@ namespace ITM_Agent.ucPanel
     /// </summary>
     public partial class ucOptionPanel : UserControl
     {
+        private bool isRunning = false;
         private const string OptSection = "Option";
         private const string Key_PerfLog = "EnablePerfoLog";
         private const string Key_InfoAutoDel = "EnableInfoAutoDel";
@@ -51,28 +52,30 @@ namespace ITM_Agent.ucPanel
             LoadOptionSettings();
         }
 
-        #region ====== Run 상태 동기화 ======   // [추가]
+        #region ====== Run 상태 동기화 ======
         /// <summary>Run/Stop 상태에 따라 모든 입력 컨트롤 Enable 토글</summary>
-        private void SetControlsEnabled(bool enabled)     // [추가]
+        private void SetControlsEnabled(bool enabled)
         {
-            chk_DebugMode.Enabled = enabled;             // [추가]
-            chk_PerfoMode.Enabled = enabled;             // [추가]
-            chk_infoDel.Enabled = enabled;             // [추가]
+            chk_DebugMode.Enabled = enabled;
+            chk_PerfoMode.Enabled = enabled;
+            chk_infoDel.Enabled = enabled;
 
             /* Retention-관련 컨트롤은 ‘Info Delete’ 체크 여부와 동기화 */
-            UpdateRetentionControls(enabled && chk_infoDel.Checked);   // [추가]
+            UpdateRetentionControls(enabled && chk_infoDel.Checked);
         }
 
         /// <summary>MainForm 에서 Run/Stop 전환 시 호출</summary>
-        public void UpdateStatusOnRun(bool isRunning)     // [추가]
+        public void UpdateStatusOnRun(bool isRunning)
         {
-            SetControlsEnabled(!isRunning);               // [추가]
+            this.isRunning = isRunning;
+            SetControlsEnabled(!isRunning);
         }
 
         /// <summary>처음 패널 로드 또는 화면 전환 시 상태 맞춤</summary>
-        public void InitializePanel(bool isRunning)       // [추가]
+        public void InitializePanel(bool isRunning)
         {
-            SetControlsEnabled(!isRunning);               // [추가]
+            this.isRunning = isRunning;
+            SetControlsEnabled(!isRunning);
         }
         #endregion
 
@@ -98,14 +101,17 @@ namespace ITM_Agent.ucPanel
             UpdateRetentionControls(infoDel);
         }
 
-        private void UpdateRetentionControls(bool enabled)
+        private void UpdateRetentionControls(bool enableCombo)
         {
-            label3.Enabled = enabled;
-            cb_info_Retention.Enabled = enabled;
-            label4.Enabled = enabled;
+            /* 콤보박스는 “Run 중이 아님” && Delete 기능 ON 일 때만 선택 가능 */
+            cb_info_Retention.Enabled = enableCombo;
 
-            if (!enabled) cb_info_Retention.SelectedIndex = -1;  // 체크 해제 시 초기화
+            /* 라벨은 Run 상태 무관, 오직 chk_infoDel 체크 여부로만 활성화 */
+            label3.Enabled = label4.Enabled = chk_infoDel.Checked;
+
+            //if (!enableCombo) cb_info_Retention.SelectedIndex = -1;
         }
+
 
         private void chk_PerfoMode_CheckedChanged(object sender, EventArgs e)
         {
@@ -120,16 +126,24 @@ namespace ITM_Agent.ucPanel
         {
             bool enabled = chk_infoDel.Checked;
 
-            /* UI ↔ Settings */
+            /* Settings 동기화 */
             settingsManager.IsInfoDeletionEnabled = enabled;
-            settingsManager.InfoRetentionDays = enabled ? int.Parse(cb_info_Retention.SelectedItem?.ToString() ?? "1") : 0;
+            settingsManager.InfoRetentionDays     = enabled
+                                                    ? int.Parse(cb_info_Retention.SelectedItem?.ToString() ?? "1")
+                                                    : 0;
 
-            /* 컨트롤 Enable */
-            cb_info_Retention.Enabled = label3.Enabled = label4.Enabled = enabled;
+            /* 라벨·콤보박스 Enable 상태 반영 */
+            UpdateRetentionControls(enabled && !isRunning);
 
-            /* 체크 시 기본 1 day 선택 */
-            if (enabled && cb_info_Retention.SelectedIndex < 0)
-                cb_info_Retention.SelectedItem = "1";
+            if (enabled)
+            {
+                if (cb_info_Retention.SelectedIndex < 0)
+                    cb_info_Retention.SelectedItem = "1";
+            }
+            else
+            {
+                cb_info_Retention.SelectedIndex = -1;
+            }
         }
 
         private void cb_info_Retention_SelectedIndexChanged(object s, EventArgs e)
