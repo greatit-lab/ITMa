@@ -287,10 +287,33 @@ namespace PrealignDataLib
             rows.Sort((a, b) => a.Item4.CompareTo(b.Item4));
 
             /* diff */
-            TimeSpan diff = GetPerfDiff(eqpid);
-            if (diff == TimeSpan.Zero)
-                diff = GetTimeSyncDiff()
-                       .GetValueOrDefault(DateTime.Now - rows[rows.Count - 1].Item4);
+            TimeSpan diff = TimeSpan.Zero;
+            
+            // ================== [수정 제안] ==================
+            // diff 값이 0일 경우, 최대 5번(약 2.5초) 재시도
+            for (int i = 0; i < 5; i++)
+            {
+                diff = GetPerfDiff(eqpid);
+                if (diff != TimeSpan.Zero) break;
+
+                diff = GetTimeSyncDiff().GetValueOrDefault(TimeSpan.Zero);
+                if (diff != TimeSpan.Zero) break;
+                
+                // 마지막 시도 전까지 잠시 대기
+                if (i < 4)
+                {
+                    SimpleLogger.Debug($"diff is zero. Retrying... ({i + 1}/5)");
+                    Thread.Sleep(500); 
+                }
+            }
+            
+            // 최종적으로 diff가 0이면, 마지막 행 기준으로라도 계산
+            if(diff == TimeSpan.Zero)
+            {
+                SimpleLogger.Event("Could not obtain a valid time diff. Calculating based on the last row.");
+                diff = DateTime.Now - rows[rows.Count - 1].Item4;
+            }
+            // =================================================
 
             /* DataTable */
             var dt = new DataTable();
@@ -309,7 +332,7 @@ namespace PrealignDataLib
             }
 
             Upload(dt);
-            SimpleLogger.Event($"rows={dt.Rows.Count} uploaded");
+            SimpleLogger.Event($"rows={dt.Rows.Count} uploaded with diff: {diff}");
         }
 
         /*──────────────── diff 계산 ───────────────────────*/
