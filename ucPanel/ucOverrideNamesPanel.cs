@@ -885,7 +885,6 @@ namespace ITM_Agent.ucPanel
                     return;
                 }
 
-                // Baseline 파일 데이터 추출
                 var baselineFiles = Directory.GetFiles(baselineFolder, "*.info");
                 var baselineData = ExtractBaselineData(baselineFiles);
 
@@ -904,7 +903,7 @@ namespace ITM_Agent.ucPanel
                         string newFileName = ProcessTargetFile(targetFile, baselineData);
                         if (string.IsNullOrEmpty(newFileName))
                             continue;  // 변경 불필요 또는 패턴 불일치
-                        
+
                         string originalName = Path.GetFileName(targetFile);
                         // 안전장치: 동일 이름 재이동 방지
                         if (newFileName.Equals(originalName, StringComparison.Ordinal))
