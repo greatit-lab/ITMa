@@ -845,7 +845,7 @@ namespace ITM_Agent.ucPanel
             {
                 byte[] dllBytes = File.ReadAllBytes(item.AssemblyPath);
                 Assembly asm = Assembly.Load(dllBytes);
-        
+
                 Type targetType = asm.GetTypes()
                     .FirstOrDefault(t => t.IsClass && !t.IsAbstract &&
                                          t.GetMethod("ProcessAndUpload",
