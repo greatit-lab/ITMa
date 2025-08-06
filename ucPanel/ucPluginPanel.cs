@@ -17,10 +17,10 @@ namespace ITM_Agent.ucPanel
         private List<PluginListItem> loadedPlugins = new List<PluginListItem>();
         private SettingsManager settingsManager;
         private LogManager logManager;
-        
+
         // 플러그인 리스트가 변경될 때 통보용
         public event EventHandler PluginsChanged;
-        
+
         public ucPluginPanel(SettingsManager settings)
         {
             InitializeComponent();
@@ -30,7 +30,7 @@ namespace ITM_Agent.ucPanel
             // settings.ini의 [RegPlugins] 섹션에서 기존에 등록된 플러그인 정보를 불러옴
             LoadPluginsFromSettings();
         }
-        
+
         private void UpdatePluginListDisplay()
         {
             lb_PluginList.Items.Clear();
@@ -39,7 +39,7 @@ namespace ITM_Agent.ucPanel
                 lb_PluginList.Items.Add($"{i + 1}. {loadedPlugins[i]}");
             }
         }
-        
+
         private void btn_PlugAdd_Click(object sender, EventArgs e)
         {
             /* 1) 파일 선택 대화상자 (전통적 using 블록) */
@@ -68,7 +68,7 @@ namespace ITM_Agent.ucPanel
                     /* 3) Library 폴더 준비 */
                     string libraryFolder = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Library");
                     if (!Directory.Exists(libraryFolder)) Directory.CreateDirectory(libraryFolder);
-                    
+
                     /* 4) 플러그인 DLL 복사 */
                     string destDllPath = Path.Combine(libraryFolder, Path.GetFileName(selectedDllPath));
                     if (File.Exists(destDllPath))
@@ -84,11 +84,11 @@ namespace ITM_Agent.ucPanel
                         string refFile = refAsm.Name + ".dll";
                         string srcRef = Path.Combine(Path.GetDirectoryName(selectedDllPath), refFile);
                         string dstRef = Path.Combine(libraryFolder, refFile);
-                        
+
                         if (File.Exists(srcRef) && !File.Exists(dstRef))
                             File.Copy(srcRef, dstRef);
                     }
-                    
+
                     /* 6) 필수 NuGet DLL 강제 복사 (CodePages 등) */
                     string[] mustHave = { "System.Text.Encoding.CodePages.dll" };
                     foreach (var f in mustHave)
@@ -98,20 +98,21 @@ namespace ITM_Agent.ucPanel
                         if (File.Exists(src) && !File.Exists(dst))
                             File.Copy(src, dst);
                     }
+
                     /* 7) 목록 설정 등록 */
                     var version = asm.GetName().Version.ToString();  // 어셈블리 버전 추출
                     var item = new PluginListItem
                     {
-                        PluginName  = pluginName,
+                        PluginName = pluginName,
                         PluginVersion = version,     // ★ 설정
-                        AssemblyPath= destDllPath
+                        AssemblyPath = destDllPath
                     };
-                    
+
                     loadedPlugins.Add(item);
                     UpdatePluginListDisplay();            // 번호 재구성
                     SavePluginInfoToSettings(item);
                     logManager.LogEvent($"Plugin registered: {pluginName}");
-                    PluginsChanged?.Invoke(this, EventArgs.Empty);     // ✅ 새로 추가
+                    PluginsChanged?.Invoke(this, EventArgs.Empty);
                 }
                 catch (Exception ex)
                 {
@@ -197,7 +198,7 @@ namespace ITM_Agent.ucPanel
             // (1)  플러그인 DLL은 항상 BaseDir\Library 에 복사되므로
             //      ini 파일에는 "Library\파일명.dll" 만 저장
             string relativePath = Path.Combine("Library", Path.GetFileName(pluginItem.AssemblyPath));
-        
+
             // (2)  Settings.ini → [RegPlugins] 섹션에 기록
             settingsManager.SetValueToSection("RegPlugins",
                 pluginItem.PluginName,
@@ -213,38 +214,38 @@ namespace ITM_Agent.ucPanel
                 // "PluginName = AssemblyPath" 형식 파싱
                 string[] parts = entry.Split(new[] { '=' }, 2);
                 if (parts.Length != 2) continue;
-        
-                string iniKeyName   = parts[0].Trim();   // INI에 기록된 키(=플러그인명)
+
+                string iniKeyName = parts[0].Trim();   // INI에 기록된 키(=플러그인명)
                 string assemblyPath = parts[1].Trim();   // 상대 or 절대 경로
-        
+
                 // ② 상대 경로 → 절대 경로 변환
                 if (!Path.IsPathRooted(assemblyPath))
                     assemblyPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, assemblyPath);
-        
+
                 if (!File.Exists(assemblyPath))
                 {
                     logManager.LogError($"플러그인 DLL을 찾을 수 없습니다: {assemblyPath}");
                     continue;
                 }
-        
+
                 try
                 {
                     /* ③ DLL 메모리 로드 → 파일 잠금 방지 */
                     byte[] dllBytes = File.ReadAllBytes(assemblyPath);
-                    Assembly asm    = Assembly.Load(dllBytes);
+                    Assembly asm = Assembly.Load(dllBytes);
         
                     /* ④ 어셈블리 메타데이터 추출 */
-                    string asmName    = asm.GetName().Name;              // 실제 어셈블리 이름
+                    string asmName = asm.GetName().Name;              // 실제 어셈블리 이름
                     string asmVersion = asm.GetName().Version.ToString();// 버전 문자열
-        
+
                     /* ⑤ PluginListItem 구성 */
                     var item = new PluginListItem
                     {
-                        PluginName    = asmName,
+                        PluginName = asmName,
                         PluginVersion = asmVersion,
-                        AssemblyPath  = assemblyPath
+                        AssemblyPath = assemblyPath
                     };
-        
+
                     loadedPlugins.Add(item);                 // 내부 리스트 보존
                     logManager.LogEvent($"Plugin auto-loaded: {item}");
                 }
@@ -263,19 +264,19 @@ namespace ITM_Agent.ucPanel
         {
             return loadedPlugins;
         }
-        
+
         #region ====== Run 상태 동기화 ======   // [추가]
-        
+
         /// <summary>
         /// 각 컨트롤의 Enable 상태를 일괄 변경한다.
         /// </summary>
         private void SetControlsEnabled(bool enabled)         // [추가]
         {
-            btn_PlugAdd.Enabled    = enabled;
+            btn_PlugAdd.Enabled = enabled;
             btn_PlugRemove.Enabled = enabled;
-            lb_PluginList.Enabled  = enabled;
+            lb_PluginList.Enabled = enabled;
         }
-        
+
         /// <summary>
         /// MainForm 에서 Run/Stop 전환 시 호출된다.
         /// </summary>
@@ -283,7 +284,7 @@ namespace ITM_Agent.ucPanel
         {
             SetControlsEnabled(!isRunning);
         }
-        
+
         /// <summary>
         /// 처음 패널을 화면에 띄울 때, 혹은 MainForm 에서 상태를 다시 맞출 때 호출.
         /// </summary>
@@ -291,7 +292,7 @@ namespace ITM_Agent.ucPanel
         {
             SetControlsEnabled(!isRunning);
         }
-        
+
         #endregion
     }
 }
