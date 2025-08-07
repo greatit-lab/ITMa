@@ -226,7 +226,7 @@ namespace PrealignDataLib
             try
             {
                 // 수동 호출 시에는 파일 전체를 처리하는 ProcessCore를 호출
-                ProcessCore(filePath, eqpid); 
+                ProcessCore(filePath, eqpid);
             }
             catch (Exception ex) { SimpleLogger.Error("EX " + ex.Message); }
         }
