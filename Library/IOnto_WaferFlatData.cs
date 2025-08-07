@@ -6,7 +6,7 @@ using System.IO;
 using System.Linq;
 using System.Text;
 using System.Text.RegularExpressions;
-using Npgsql;               // ★ MySql → Npgsql
+using Npgsql;
 using ConnectInfo;
 using System.Threading;
 using ITM_Agent.Services;
@@ -76,7 +76,7 @@ namespace Onto_WaferFlatDataLib
         string PluginName { get; }
         void ProcessAndUpload(string folderPath, string settingsFilePath = "Settings.ini");
     }
-  
+
     public class Onto_WaferFlatData : IOnto_WaferFlatData
     {
         private static string ReadAllTextSafe(string path, Encoding enc, int timeoutMs = 30000)
@@ -86,8 +86,7 @@ namespace Onto_WaferFlatDataLib
             {
                 try
                 {
-                    using (var fs = new FileStream(path, FileMode.Open,
-                                                  FileAccess.Read, FileShare.ReadWrite))
+                    using (var fs = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite))
                     using (var sr = new StreamReader(fs, enc))
                     {
                         return sr.ReadToEnd();
@@ -275,7 +274,7 @@ namespace Onto_WaferFlatDataLib
              * ---------------------------------------------------- */
             var rows = new List<Dictionary<string, object>>();
             var intCols = new HashSet<string> { "point", "dierow", "diecol", "dienum", "diepointtag" }; // [수정]
- 
+
             for (int i = hdrIdx + 1; i < lines.Length; i++)
             {
                 if (string.IsNullOrWhiteSpace(lines[i])) continue;
@@ -288,7 +287,7 @@ namespace Onto_WaferFlatDataLib
                 {
                     ["cassettercp"] = meta.TryGetValue("Cassette Recipe Name", out var v1) ? v1 : "",
                     ["stagercp"] = meta.TryGetValue("Stage Recipe Name", out var v2) ? v2 : "",
-                    ["stagegroup"]  = meta.TryGetValue("Stage Group Name", out var v3) ? v3 : "",
+                    ["stagegroup"] = meta.TryGetValue("Stage Group Name", out var v3) ? v3 : "",
                     ["lotid"] = meta.TryGetValue("Lot ID", out var v4) ? v4 : "",
                     ["waferid"] = waferNo ?? (object)DBNull.Value,
                     ["datetime"] = (dtVal != DateTime.MinValue) ? (object)dtVal : DBNull.Value,
@@ -301,7 +300,7 @@ namespace Onto_WaferFlatDataLib
                 {
                     string colName = kv.Key;             // 소문자 snake_case
                     int idx = kv.Value;
-                    string valRaw  = (idx < vals.Length) ? vals[idx] : "";      // [수정] raw → valRaw
+                    string valRaw = (idx < vals.Length) ? vals[idx] : "";      // [수정] raw → valRaw
 
                     if (string.IsNullOrEmpty(valRaw)) { row[colName] = DBNull.Value; continue; }
 
@@ -377,7 +376,7 @@ namespace Onto_WaferFlatDataLib
                     var cols = dt.Columns.Cast<DataColumn>().Select(c => c.ColumnName).ToArray();
 
                     // PostgreSQL 은 대소문자/예약어 충돌 방지를 위해 "컬럼" 을 큰따옴표로 감쌉니다
-                    string colList   = string.Join(",", cols.Select(c => $"\"{c}\""));
+                    string colList = string.Join(",", cols.Select(c => $"\"{c}\""));
                     string paramList = string.Join(",", cols.Select(c => "@" + c));
 
                     string sql = $"INSERT INTO public.wf_flat ({colList}) VALUES ({paramList});";
@@ -408,8 +407,7 @@ namespace Onto_WaferFlatDataLib
                         {
                             tx.Rollback();
                             SimpleLogger.Debug($"Duplicate entry skipped ▶ {pex.Message}");
-                            SimpleLogger.Event(
-                                $"동일한 데이터가 이미 등록되어 업로드가 생략되었습니다 ▶ {srcFile}");
+                            SimpleLogger.Event($"동일한 데이터가 이미 등록되어 업로드가 생략되었습니다 ▶ {srcFile}");
                         }
                         /* ───── 기타 PostgreSQL 오류 ───── */
                         catch (PostgresException pex)
