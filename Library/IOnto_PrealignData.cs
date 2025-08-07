@@ -217,15 +217,15 @@ namespace PrealignDataLib
         public void ProcessAndUpload(string filePath, object arg1 = null, object arg2 = null)
         {
             if (!File.Exists(filePath)) { SimpleLogger.Debug("no file"); return; }
-            
+
             // ★ 수정: WaitReady 호출
-            if (!WaitReady(filePath))   { SimpleLogger.Debug("lock skip"); return; }
+            if (!WaitReady(filePath)) { SimpleLogger.Debug("lock skip"); return; }
 
             // ★ 수정: GetEqpid 호출
             string eqpid = GetEqpid(arg1 as string ?? "Settings.ini");
-            try 
+            try
             {
-                 // 수동 호출 시에는 파일 전체를 처리하는 ProcessCore를 호출
+                // 수동 호출 시에는 파일 전체를 처리하는 ProcessCore를 호출
                 ProcessCore(filePath, eqpid); 
             }
             catch (Exception ex) { SimpleLogger.Error("EX " + ex.Message); }
