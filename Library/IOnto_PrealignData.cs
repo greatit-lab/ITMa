@@ -11,6 +11,7 @@ using System.Text.RegularExpressions;
 using System.Threading;
 using ConnectInfo;
 using Npgsql;
+using ITM_Agent.Services; // ★ using 구문 확인
 
 namespace PrealignDataLib
 {
@@ -18,19 +19,15 @@ namespace PrealignDataLib
     internal static class SimpleLogger
     {
         private static readonly object _sync = new object();
-        private static readonly string _dir =
-            Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Logs");
-
-        private static string PathOf(string sfx) =>
-            Path.Combine(_dir, $"{DateTime.Now:yyyyMMdd}_{sfx}.log");
+        private static readonly string _dir = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Logs");
+        private static string PathOf(string sfx) => Path.Combine(_dir, $"{DateTime.Now:yyyyMMdd}_{sfx}.log");
 
         private static void Write(string s, string m)
         {
             lock (_sync)
             {
                 Directory.CreateDirectory(_dir);
-                string line =
-                    $"{DateTime.Now:yyyy-MM-dd HH:mm:ss.fff} [Prealign] {m}{Environment.NewLine}";
+                string line = $"{DateTime.Now:yyyy-MM-dd HH:mm:ss.fff} [Prealign] {m}{Environment.NewLine}";
                 try { File.AppendAllText(PathOf(s), line, Encoding.UTF8); } catch { }
             }
         }
@@ -62,7 +59,7 @@ namespace PrealignDataLib
         private DateTime _lastEvt = DateTime.MinValue;   // debounce
 
         private readonly string _pluginName;
-        public  string  PluginName => _pluginName;
+        public string PluginName => _pluginName;
 
         /* 정적 ctor : CP949 등록 */
         static Onto_PrealignData()
@@ -105,9 +102,9 @@ namespace PrealignDataLib
             {
                 NotifyFilter =
                     NotifyFilters.FileName | NotifyFilters.LastWrite | NotifyFilters.Size,
-                Filter               = "PreAlignLog.dat",
-                IncludeSubdirectories= false,
-                EnableRaisingEvents  = true
+                Filter = "PreAlignLog.dat",
+                IncludeSubdirectories = false,
+                EnableRaisingEvents = true
             };
             _fw.Created += OnChanged;
             _fw.Changed += OnChanged;
@@ -146,7 +143,7 @@ namespace PrealignDataLib
                         string eqpid = GetEqpid("Settings.ini");
 
                         BackupFile(e.FullPath);
-                        ProcessIncremental(e.FullPath, eqpid, prevLen); // [추가] 증분
+                        ProcessIncremental(e.FullPath, eqpid, prevLen); // 증분 처리
 
                         _lastLen[e.FullPath] = currLen;    // 길이 갱신
                         return;
@@ -176,10 +173,10 @@ namespace PrealignDataLib
         }
 
         /*──────────────── 증분 처리 ───────────────────────*/
-        private void ProcessIncremental(string path, string eqpid, long prevLen)   // [추가]
+        private void ProcessIncremental(string path, string eqpid, long prevLen)
         {
             var rows = new List<Tuple<decimal, decimal, decimal, DateTime>>();
-            var rex  = new Regex(
+            var rex = new Regex(
                 @"Xmm\s*([-\d.]+)\s*Ymm\s*([-\d.]+)\s*Notch\s*([-\d.]+)\s*Time\s*([\d\-:\s]+)",
                 RegexOptions.IgnoreCase);
 
@@ -220,10 +217,17 @@ namespace PrealignDataLib
         public void ProcessAndUpload(string filePath, object arg1 = null, object arg2 = null)
         {
             if (!File.Exists(filePath)) { SimpleLogger.Debug("no file"); return; }
+            
+            // ★ 수정: WaitReady 호출
             if (!WaitReady(filePath))   { SimpleLogger.Debug("lock skip"); return; }
 
+            // ★ 수정: GetEqpid 호출
             string eqpid = GetEqpid(arg1 as string ?? "Settings.ini");
-            try { ProcessCore(filePath, eqpid); }
+            try 
+            {
+                 // 수동 호출 시에는 파일 전체를 처리하는 ProcessCore를 호출
+                ProcessCore(filePath, eqpid); 
+            }
             catch (Exception ex) { SimpleLogger.Error("EX " + ex.Message); }
         }
 
@@ -243,11 +247,11 @@ namespace PrealignDataLib
             string[] lines = ReadAllText(file)
                              .Split(new[] { "\r\n", "\n" }, StringSplitOptions.RemoveEmptyEntries);
 
-            DateTime now       = DateTime.Now;
-            DateTime winStart  = now - WINDOW;
+            DateTime now = DateTime.Now;
+            DateTime winStart = now - WINDOW;
 
             var rex = new Regex(
-                @"Xmm\s*([-\d.]+)\\s*Ymm\\s*([-\d.]+)\\s*Notch\\s*([-\d.]+)\\s*Time\\s*([\\d\\-:\\s]+)",
+                @"Xmm\s*([-\d.]+)\s*Ymm\s*([-\d.]+)\s*Notch\s*([-\d.]+)\s*Time\s*([\d\-:\s]+)",
                 RegexOptions.IgnoreCase);
 
             var rows = new List<Tuple<decimal, decimal, decimal, DateTime>>();
@@ -286,95 +290,26 @@ namespace PrealignDataLib
         {
             rows.Sort((a, b) => a.Item4.CompareTo(b.Item4));
 
-            /* diff */
-            TimeSpan diff = TimeSpan.Zero;
-            
-            // ================== [수정 제안] ==================
-            // diff 값이 0일 경우, 최대 5번(약 2.5초) 재시도
-            for (int i = 0; i < 5; i++)
-            {
-                diff = GetPerfDiff(eqpid);
-                if (diff != TimeSpan.Zero) break;
-
-                diff = GetTimeSyncDiff().GetValueOrDefault(TimeSpan.Zero);
-                if (diff != TimeSpan.Zero) break;
-                
-                // 마지막 시도 전까지 잠시 대기
-                if (i < 4)
-                {
-                    SimpleLogger.Debug($"diff is zero. Retrying... ({i + 1}/5)");
-                    Thread.Sleep(500); 
-                }
-            }
-            
-            // 최종적으로 diff가 0이면, 마지막 행 기준으로라도 계산
-            if(diff == TimeSpan.Zero)
-            {
-                SimpleLogger.Event("Could not obtain a valid time diff. Calculating based on the last row.");
-                diff = DateTime.Now - rows[rows.Count - 1].Item4;
-            }
-            // =================================================
-
-            /* DataTable */
             var dt = new DataTable();
-            dt.Columns.Add("eqpid",    typeof(string));
+            dt.Columns.Add("eqpid", typeof(string));
             dt.Columns.Add("datetime", typeof(DateTime));
-            dt.Columns.Add("xmm",      typeof(decimal));
-            dt.Columns.Add("ymm",      typeof(decimal));
-            dt.Columns.Add("notch",    typeof(decimal));
-            dt.Columns.Add("serv_ts",  typeof(DateTime));
+            dt.Columns.Add("xmm", typeof(decimal));
+            dt.Columns.Add("ymm", typeof(decimal));
+            dt.Columns.Add("notch", typeof(decimal));
+            dt.Columns.Add("serv_ts", typeof(DateTime));
 
             foreach (var r in rows)
             {
-                DateTime serv = (r.Item4 + diff)
-                                .AddTicks(-((r.Item4 + diff).Ticks % TimeSpan.TicksPerSecond));
-                dt.Rows.Add(eqpid, r.Item4, r.Item1, r.Item2, r.Item3, serv);
+                /* ★★★ 핵심 수정 ★★★ */
+                // TimeSyncProvider를 통해 오차 보정 및 KST 변환
+                DateTime serv_kst = TimeSyncProvider.Instance.ToSynchronizedKst(r.Item4);
+                serv_kst = serv_kst.AddTicks(-(serv_kst.Ticks % TimeSpan.TicksPerSecond));
+
+                dt.Rows.Add(eqpid, r.Item4, r.Item1, r.Item2, r.Item3, serv_kst);
             }
 
             Upload(dt);
-            SimpleLogger.Event($"rows={dt.Rows.Count} uploaded with diff: {diff}");
-        }
-
-        /*──────────────── diff 계산 ───────────────────────*/
-        private TimeSpan GetPerfDiff(string eqpid)
-        {
-            try
-            {
-                string cs = DatabaseInfo.CreateDefault().GetConnectionString();
-                using (var conn = new NpgsqlConnection(cs))
-                {
-                    conn.Open();
-                    using (var cmd = conn.CreateCommand())
-                    {
-                        cmd.CommandText =
-                            "SELECT serv_ts, ts FROM eqp_perf WHERE eqpid=@e " +
-                            "ORDER BY serv_ts DESC LIMIT 1";
-                        cmd.Parameters.AddWithValue("@e", eqpid);
-                        using (var rd = cmd.ExecuteReader())
-                        {
-                            if (rd.Read()) return rd.GetDateTime(0) - rd.GetDateTime(1);
-                        }
-                    }
-                }
-            }
-            catch (Exception ex) { SimpleLogger.Debug("perfDiff fail: " + ex.Message); }
-            return TimeSpan.Zero;
-        }
-
-        private TimeSpan? GetTimeSyncDiff()
-        {
-            try
-            {
-                Type tp = Type.GetType("ITM_Agent.Services.TimeSyncProvider, ITM_Agent");
-                if (tp != null)
-                {
-                    object inst = tp.GetProperty("Instance",
-                                   BindingFlags.Public | BindingFlags.Static).GetValue(null);
-                    return (TimeSpan)tp.GetProperty("Diff").GetValue(inst);
-                }
-            }
-            catch { }
-            return null;
+            SimpleLogger.Event($"rows={dt.Rows.Count} uploaded successfully.");
         }
 
         /*──────────────── DB Upload ───────────────────────*/
@@ -390,7 +325,7 @@ namespace PrealignDataLib
                     cmd.Transaction = tx;
                     string cols = string.Join(",",
                         dt.Columns.Cast<DataColumn>().Select(c => "\"" + c.ColumnName + "\""));
-                    string prm  = string.Join(",",
+                    string prm = string.Join(",",
                         dt.Columns.Cast<DataColumn>().Select(c => "@" + c.ColumnName));
 
                     cmd.CommandText =
@@ -428,8 +363,11 @@ namespace PrealignDataLib
 
         private string GetEqpid(string ini)
         {
-            if (!File.Exists(ini)) return string.Empty;
-            foreach (string ln in File.ReadLines(ini))
+            // ini 파일이 상대 경로일 수 있으므로 전체 경로로 변환
+            string iniPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, ini);
+
+            if (!File.Exists(iniPath)) return string.Empty;
+            foreach (string ln in File.ReadLines(iniPath))
             {
                 if (ln.Trim().StartsWith("Eqpid", StringComparison.OrdinalIgnoreCase))
                 {
