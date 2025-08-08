@@ -46,7 +46,7 @@ namespace ITM_Agent
         protected override void OnLoad(EventArgs e)
         {
             base.OnLoad(e);
-            PerformanceWarmUp.Run();    // 예열
+            PerformanceWarmUp.Run();
         }
 
         public MainForm(SettingsManager settingsManager)
@@ -98,7 +98,6 @@ namespace ITM_Agent
 
             btn_Run.Click += btn_Run_Click;
             btn_Stop.Click += btn_Stop_Click;
-            // btn_Quit.Click += btn_Quit_Click;
 
             UpdateUIBasedOnSettings();
             infoCleaner = new InfoRetentionCleaner(settingsManager);
@@ -230,13 +229,11 @@ namespace ITM_Agent
             ucPluginPanel?.UpdateStatusOnRun(isRunning);
             ucOptionPanel?.UpdateStatusOnRun(isRunning);
 
-            // cb_DebugMode.Enabled = !isRunning;
-
             logManager.LogEvent($"Status updated to: {status}");
             if (isDebugMode)
                 logManager.LogDebug($"Status updated to: {status}. Running state: {isRunning}");
 
-            /* ---------- 버튼/메뉴 / 트레이 항목 Enable 처리 ---------------- */
+            /* ---------- 버튼 / 트레이 메뉴 활성화 ---------------- */
             if (status == "Stopped!")
             {
                 btn_Run.Enabled = false;
@@ -295,8 +292,9 @@ namespace ITM_Agent
                 /*──────── File Watcher 시작 ────────*/
                 fileWatcherManager.StartWatching();
 
-                /*──────── Performance DB 로깅 ON ───*/   // [추가]
-                PerformanceDbWriter.Start(lb_eqpid.Text);  // [추가]
+                /* ★★★ 핵심 수정 ★★★ */
+                // PerformanceDbWriter.Start 호출 시, MainForm이 가진 eqpidManager 인스턴스를 전달
+                PerformanceDbWriter.Start(lb_eqpid.Text, this.eqpidManager);
 
                 isRunning = true; // 상태 업데이트
                 UpdateMainStatus("Running...", Color.Blue);
@@ -389,7 +387,7 @@ namespace ITM_Agent
             /* 1) 러너 Watcher 안전 종료 */
             try
             {
-                fileWatcherManager?.StopWatchers();   // ☑ Dispose → StopWatchers
+                fileWatcherManager?.StopWatchers();
                 fileWatcherManager = null;
 
                 /* ▼ InfoRetentionCleaner 정리 ▼ */          // [추가]
