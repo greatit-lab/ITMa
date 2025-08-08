@@ -9,23 +9,25 @@ using System.Threading;
 
 namespace ITM_Agent.Services
 {
-    /// <summary>
-    /// PerformanceMonitor 의 Metric 을 버퍼링하여
-    /// eqp_perf 테이블로 60건/30초 단위 배치 INSERT
-    /// </summary>
     public sealed class PerformanceDbWriter
     {
         /* ---------- 필드 ---------- */
         private readonly string eqpid;
-        private readonly List<Metric> buf = new List<Metric>(capacity: 1000);
+        private readonly List<Metric> buf = new List<Metric>(1000);
         private readonly Timer timer;
         private readonly object sync = new object();
         private const int BULK = 60;
         private const int FLUSH_MS = 30_000;
+        private static readonly LogManager logger = new LogManager(AppDomain.CurrentDomain.BaseDirectory);
+        private readonly EqpidManager eqpidManager; // ★ EqpidManager 필드
 
-        /* LogManager 인스턴스 (Writer 전용) ────────────────────────────────*/
-        private static readonly LogManager logger =
-            new LogManager(AppDomain.CurrentDomain.BaseDirectory);   // [추가]
+        private PerformanceDbWriter(string eqpid, EqpidManager manager) // 생성자
+        {
+            this.eqpid = eqpid;
+            this.eqpidManager = manager ?? throw new ArgumentNullException(nameof(manager)); // null 체크
+            PerformanceMonitor.Instance.RegisterConsumer(OnSample);
+            timer = new Timer(_ => Flush(), null, FLushMS, FLushMS);
+        }
 
         /* ---------- 생성 & 소멸 ---------- */
         private PerformanceDbWriter(string eqpid)
@@ -38,31 +40,23 @@ namespace ITM_Agent.Services
 
         private static PerformanceDbWriter current;
 
-        public static void Start(string eqpid)
+        public static void Start(string eqpid, EqpidManager manager)
         {
             if (current != null) return;
-
             PerformanceMonitor.Instance.StartSampling();
-            current = new PerformanceDbWriter(eqpid);
+            current = new PerformanceDbWriter(eqpid, manager);
         }
 
         public static void Stop()
         {
             if (current == null) return;
-
             PerformanceMonitor.Instance.StopSampling();
             current.Flush();
             current.timer.Dispose();
-
-            /*──────── 기존: private 필드 직접 접근 [삭제]────────
-            PerformanceMonitor.Instance.sampler.OnSample -= current.OnSample;
-            ─────────────────────────────────────────────*/
-
-            PerformanceMonitor.Instance.UnregisterConsumer(current.OnSample); // [수정]
+            PerformanceMonitor.Instance.UnregisterConsumer(current.OnSample);
             current = null;
         }
 
-        /* ---------- 콜백 ---------- */
         private void OnSample(Metric m)
         {
             lock (sync)
@@ -75,7 +69,6 @@ namespace ITM_Agent.Services
 
         private void Flush()
         {
-            /* ① 버퍼 스냅샷 */
             List<Metric> batch;
             lock (sync)
             {
@@ -84,18 +77,13 @@ namespace ITM_Agent.Services
                 buf.Clear();
             }
 
-            /* ② 연결 문자열 */
             string cs;
             try { cs = DatabaseInfo.CreateDefault().GetConnectionString(); }
             catch { logger.LogError("[Perf] ConnString 실패"); return; }
 
-            /* ③ 보정량 계산 */
-            DateTime serverNow = DateTime.Now;
-            DateTime tsMax = batch.Max(b => b.Timestamp);
-            TimeSpan diff = serverNow - tsMax;                    // 로컬→서버 차
-            TimeSyncProvider.Instance.UpdateDiff(diff);
+            // ★ 이제 eqpidManager는 null이 아니므로 오류가 발생하지 않습니다.
+            var sourceZone = eqpidManager.GetTimezoneForEqpid(eqpid);
 
-            /* ④ 배치 INSERT */
             try
             {
                 using (var conn = new NpgsqlConnection(cs))
@@ -119,23 +107,19 @@ namespace ITM_Agent.Services
 
                         foreach (var m in batch)
                         {
-                            /* eqpid 전처리 */
                             string clean = eqpid.StartsWith("Eqpid:", StringComparison.OrdinalIgnoreCase)
                                            ? eqpid.Substring(6).Trim() : eqpid.Trim();
                             pEqp.Value = clean;
 
-                            /* ts (밀리초 절단) */
                             var ts = new DateTime(m.Timestamp.Year, m.Timestamp.Month, m.Timestamp.Day,
                                                   m.Timestamp.Hour, m.Timestamp.Minute, m.Timestamp.Second);
                             pTs.Value = ts;
 
-                            /* serv_ts = ts + diff, 이후 밀리초 제거 ----------------------- */
-                            var srv = TimeSyncProvider.Instance.Apply(ts);              // [추가] ts + diff
-                            srv = new DateTime(srv.Year, srv.Month, srv.Day,            // [추가] 밀리초 절단
+                            var srv = TimeSyncProvider.Instance.ToSynchronizedKst(ts); 
+                            srv = new DateTime(srv.Year, srv.Month, srv.Day,
                                                srv.Hour, srv.Minute, srv.Second);
                             pSrv.Value = srv;
 
-                            /* 사용률 */
                             pCpu.Value = Math.Round(m.Cpu, 2);
                             pMem.Value = Math.Round(m.Mem, 2);
 
