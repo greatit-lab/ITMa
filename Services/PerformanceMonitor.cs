@@ -282,10 +282,12 @@ namespace ITM_Agent.Services
         {
             float cpuVal = cpuCounter.NextValue();
             float freeMb = memFreeMbCounter.NextValue();
-            Thread.Sleep(50);                        // CPU 카운터 워밍업
+            // 1초 동안의 평균 사용량을 측정하기 위해 대기 시간을 1000ms로 변경
+            Thread.Sleep(1000); 
             cpuVal = cpuCounter.NextValue();
-
-            float usedRatio = ((totalMemMb - freeMb) / totalMemMb) * 100f;
+        
+            // totalMemMb가 0인 경우 DivideByZeroException 방지
+            float usedRatio = (totalMemMb > 0) ? ((totalMemMb - freeMb) / totalMemMb) * 100f : 0f;
             OnSample?.Invoke(new Metric(cpuVal, usedRatio));
 
             bool isOver = (cpuVal > 75f) || (usedRatio > 80f);
