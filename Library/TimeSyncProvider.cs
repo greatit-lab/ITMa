@@ -21,6 +21,17 @@ namespace ITM_Agent.Services
         private readonly TimeZoneInfo kstZone;
         private readonly Timer syncTimer;
 
+        public TimeSpan Diff
+        {
+            get
+            {
+                lock (syncLock)
+                {
+                    return clockDiff;
+                }
+            }
+        }
+
         private TimeSyncProvider()
         {
             // KST 타임존 정보 로드
