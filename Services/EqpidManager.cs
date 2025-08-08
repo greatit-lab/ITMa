@@ -28,7 +28,7 @@ namespace ITM_Agent.Services
             this.appVersion = appVersion ?? throw new ArgumentNullException(nameof(appVersion));
         }
 
-      public TimeZoneInfo GetTimezoneForEqpid(string eqpid)
+        public TimeZoneInfo GetTimezoneForEqpid(string eqpid)
         {
             // 1. 캐시에 정보가 있으면 즉시 반환
             if (timezoneCache.TryGetValue(eqpid, out TimeZoneInfo cachedZone))
@@ -227,7 +227,7 @@ namespace ITM_Agent.Services
             return "Unknown OS";
         }
 
-        public static string GetArchitecture() => 
+        public static string GetArchitecture() =>
             Environment.Is64BitOperatingSystem ? "64-bit" : "32-bit";
 
         public static string GetMachineName() => Environment.MachineName;
