@@ -19,7 +19,6 @@ namespace ITM_Agent
             lb_Version.Text = MainForm.VersionInfo;
 
             // ▼▼▼ [추가] 리소스에서 텍스트를 불러와 UI에 적용 ▼▼▼
-            this.Text = "About Information..."; // 폼 제목은 그대로 두거나 리소스로 관리 가능
             this.label1.Text = Resources.AboutInfo_Desc1;
             this.label2.Text = Resources.AboutInfo_Desc2;
             this.label3.Text = Resources.AboutInfo_Desc3;
