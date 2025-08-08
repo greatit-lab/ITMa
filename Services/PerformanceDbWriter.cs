@@ -120,7 +120,13 @@ namespace ITM_Agent.Services
                                                srv.Hour, srv.Minute, srv.Second);
                             pSrv.Value = srv;
 
-                            pCpu.Value = Math.Round(m.Cpu, 2);
+                            float cpuUsage = (float)Math.Round(m.Cpu, 2);
+                            if (cpuUsage == 0.0f && m.Cpu > 0.0f)
+                            {
+                                // 반올림 후 0이 되었지만, 원본 값은 0보다 큰 경우 0.01로 보정
+                                cpuUsage = 0.01f;
+                            }
+                            pCpu.Value = cpuUsage;
                             pMem.Value = Math.Round(m.Mem, 2);
 
                             cmd.ExecuteNonQuery();
