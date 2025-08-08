@@ -9,13 +9,8 @@ using System.Threading.Tasks;
 
 namespace ITM_Agent.Services
 {
-    /// <summary>
-    /// FileSystemWatcher를 사용하여 지정된 타겟 폴더(TargetFolders)를 감시하고,
-    /// 발생하는 파일 변경 이벤트에 따라 정규표현식(Regex) 패턴 매칭 후 파일을 지정된 폴더로 복사하는 로직을 담당합니다.
-    /// </summary>
     public class FileWatcherManager
     {
-        
         private SettingsManager settingsManager;
         private LogManager logManager;
         private bool isDebugMode;  // readonly 제거
@@ -25,20 +20,20 @@ namespace ITM_Agent.Services
         private readonly HashSet<string> deletedFiles = new HashSet<string>(); // 삭제된 파일 추적
         private readonly Dictionary<string, DateTime> fileProcessTracker = new Dictionary<string, DateTime>(); // 파일 처리 추적
         private readonly TimeSpan duplicateEventThreshold = TimeSpan.FromSeconds(5); // 중복 이벤트 방지 시간
-        
+
         private bool isRunning = false;
-        
+
         // Debug Mode 상태 속성
         public bool IsDebugMode { get; set; } = false;
     
-    public FileWatcherManager(SettingsManager settingsManager, LogManager logManager, bool isDebugMode)
-    {
-       this.settingsManager = settingsManager;
-       this.logManager = logManager;
-       this.isDebugMode = isDebugMode;  // 이제 정상 할당 가능
-    }
-    
-    public void UpdateDebugMode(bool isDebug)
+        public FileWatcherManager(SettingsManager settingsManager, LogManager logManager, bool isDebugMode)
+        {
+           this.settingsManager = settingsManager;
+           this.logManager = logManager;
+           this.isDebugMode = isDebugMode;  // 이제 정상 할당 가능
+        }
+        
+        public void UpdateDebugMode(bool isDebug)
         {
             this.isDebugMode = isDebug; // 디버그 모드 상태 업데이트
         }
@@ -85,28 +80,28 @@ namespace ITM_Agent.Services
 
         public void StartWatching()
         {
-           if (isRunning)
-           {
+            if (isRunning)
+            {
                logManager.LogEvent("[FileWatcherManager] File monitoring is already running.");
                return;
-           }
-        
-           InitializeWatchers(); // 새로 초기화
-        
-           foreach (var watcher in watchers)
-           {
+            }
+            
+            InitializeWatchers(); // 새로 초기화
+            
+            foreach (var watcher in watchers)
+            {
                watcher.EnableRaisingEvents = true; // 이벤트 활성화
-           }
-        
-           isRunning = true; // 상태 업데이트
-           logManager.LogEvent("[FileWatcherManager] File monitoring started.");
-           if (settingsManager.IsDebugMode)
-           {
+            }
+            
+            isRunning = true; // 상태 업데이트
+            logManager.LogEvent("[FileWatcherManager] File monitoring started.");
+            if (settingsManager.IsDebugMode)
+            {
                logManager.LogDebug(
                    $"[FileWatcherManager] Monitoring {watchers.Count} folder(s): " +
                    $"{string.Join(", ", watchers.Select(w => w.Path))}"
                );
-           }
+            }
         }
 
         public void StopWatchers()
@@ -151,7 +146,6 @@ namespace ITM_Agent.Services
                 return;
             }
 
-            // 중복 이벤트 방지
             if (IsDuplicateEvent(e.FullPath))
             {
                 if (isDebugMode)
@@ -161,7 +155,8 @@ namespace ITM_Agent.Services
 
             try
             {
-                if (e.ChangeType == WatcherChangeTypes.Created)
+                // [수정] e.ChangeType 이 Created 또는 Changed 일 때 모두 ProcessFile 호출
+                if (e.ChangeType == WatcherChangeTypes.Created || e.ChangeType == WatcherChangeTypes.Changed) // ★ 수정된 내용
                 {
                     if (File.Exists(e.FullPath))
                     {
@@ -187,34 +182,34 @@ namespace ITM_Agent.Services
         {
             string fileName = Path.GetFileName(filePath);
             var regexList = settingsManager.GetRegexList();
-        
+
             foreach (var kvp in regexList)
             {
                 if (Regex.IsMatch(fileName, kvp.Key))
                 {
                     string destinationFolder = kvp.Value;
                     string destinationFile = Path.Combine(destinationFolder, fileName);
-        
+
                     try
                     {
                         Directory.CreateDirectory(destinationFolder);
-        
+
                         if (!await WaitForFileReady(filePath))
                         {
                             logManager.LogEvent($"[FileWatcherManager] File skipped (not ready): {fileName}");
                             return null;
                         }
-        
+
                         File.Copy(filePath, destinationFile, true);
-        
+
                         // ▼▼▼ 원본 로그 (전체 경로 출력) ▼▼▼
                         // logManager.LogEvent($"[FileWatcherManager] File Created: {filePath} -> copied {destinationFolder}");
-        
+
                         // ▲▲▲ 개선된 로그 (파일명만, 복사된 폴더경로) ▲▲▲
                         logManager.LogEvent(
                             $"[FileWatcherManager] File Created: {fileName} -> copied {destinationFolder}"
                         );
-        
+
                         return destinationFolder;
                     }
                     catch (Exception ex)
@@ -229,7 +224,7 @@ namespace ITM_Agent.Services
                     }
                 }
             }
-        
+
             logManager.LogEvent($"[FileWatcherManager] No matching regex for file: {fileName}");
             return null;
         }
