@@ -51,6 +51,7 @@ namespace ITM_Agent
             this.lblTitle.Size = new System.Drawing.Size(103, 25);
             this.lblTitle.TabIndex = 1;
             this.lblTitle.Text = "ITM Agent";
+            this.lblTitle.ForeColor = System.Drawing.Color.DarkOrange;
             //
             // grpDev
             //
@@ -100,6 +101,7 @@ namespace ITM_Agent
             this.lb_Version.Size = new System.Drawing.Size(35, 21);
             this.lb_Version.TabIndex = 5;
             this.lb_Version.Text = "Ver";
+            this.lb_Version.ForeColor = System.Drawing.Color.DarkOrange;
             //
             // label1
             //
@@ -108,7 +110,6 @@ namespace ITM_Agent
             this.label1.Name = "label1";
             this.label1.Size = new System.Drawing.Size(233, 12);
             this.label1.TabIndex = 6;
-            this.label1.Text = "ITM Agent는 ITM 계측 장비에서 생성되는";
             //
             // label2
             //
@@ -117,7 +118,6 @@ namespace ITM_Agent
             this.label2.Name = "label2";
             this.label2.Size = new System.Drawing.Size(225, 12);
             this.label2.TabIndex = 7;
-            this.label2.Text = "정보를 실시간으로 모니터링 및 분류하고";
             //
             // label3
             //
@@ -126,7 +126,6 @@ namespace ITM_Agent
             this.label3.Name = "label3";
             this.label3.Size = new System.Drawing.Size(232, 12);
             this.label3.TabIndex = 8;
-            this.label3.Text = "필요로 하는 형태로 자동 가공 ㆍ DB 적재를";
             //
             // label4
             //
@@ -136,7 +135,6 @@ namespace ITM_Agent
             this.label4.Name = "label4";
             this.label4.Size = new System.Drawing.Size(161, 12);
             this.label4.TabIndex = 9;
-            this.label4.Text = "처리하는 관리자 도구입니다.";
             // 
             // AboutInfoForm
             // 
@@ -163,7 +161,6 @@ namespace ITM_Agent
             this.grpDev.PerformLayout();
             this.ResumeLayout(false);
             this.PerformLayout();
-            
         }
 
         private Label lb_Version;
