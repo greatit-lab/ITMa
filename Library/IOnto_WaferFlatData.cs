@@ -345,9 +345,6 @@ namespace Onto_WaferFlatDataLib
         #region === DB Upload ===
         private void UploadToSQL(DataTable dt, string srcFile)
         {
-            /* 0) 보정값 준비 */
-            TimeSpan diff = ITM_Agent.Services.TimeSyncProvider.Instance.Diff;   // ★ [추가]
-
             /* 1) 컬럼 정의 확장 */
             if (!dt.Columns.Contains("serv_ts"))
                 dt.Columns.Add("serv_ts", typeof(DateTime));                     // ★ [추가]
@@ -360,7 +357,7 @@ namespace Onto_WaferFlatDataLib
                 if (r["datetime"] != DBNull.Value)
                 {
                     DateTime ts = (DateTime)r["datetime"];
-                    r["serv_ts"] = ts + diff;                                    // ★ [추가]
+                    r["serv_ts"] = ITM_Agent.Services.TimeSyncProvider.Instance.ToSynchronizedKst(ts);
                 }
                 else r["serv_ts"] = DBNull.Value;
             }
