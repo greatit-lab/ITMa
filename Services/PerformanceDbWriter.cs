@@ -26,7 +26,7 @@ namespace ITM_Agent.Services
             this.eqpid = eqpid;
             this.eqpidManager = manager ?? throw new ArgumentNullException(nameof(manager)); // null 체크
             PerformanceMonitor.Instance.RegisterConsumer(OnSample);
-            timer = new Timer(_ => Flush(), null, FLushMS, FLushMS);
+            timer = new Timer(_ => Flush(), null, FLUSH_MS, FLUSH_MS);
         }
 
         /* ---------- 생성 & 소멸 ---------- */
@@ -115,7 +115,7 @@ namespace ITM_Agent.Services
                                                   m.Timestamp.Hour, m.Timestamp.Minute, m.Timestamp.Second);
                             pTs.Value = ts;
 
-                            var srv = TimeSyncProvider.Instance.ToSynchronizedKst(ts); 
+                            var srv = TimeSyncProvider.Instance.ToSynchronizedKst(ts);
                             srv = new DateTime(srv.Year, srv.Month, srv.Day,
                                                srv.Hour, srv.Minute, srv.Second);
                             pSrv.Value = srv;
