@@ -25,14 +25,14 @@ namespace ITM_Agent.Services
 
         // Debug Mode 상태 속성
         public bool IsDebugMode { get; set; } = false;
-    
+
         public FileWatcherManager(SettingsManager settingsManager, LogManager logManager, bool isDebugMode)
         {
-           this.settingsManager = settingsManager;
-           this.logManager = logManager;
-           this.isDebugMode = isDebugMode;  // 이제 정상 할당 가능
+            this.settingsManager = settingsManager;
+            this.logManager = logManager;
+            this.isDebugMode = isDebugMode;  // 이제 정상 할당 가능
         }
-        
+
         public void UpdateDebugMode(bool isDebug)
         {
             this.isDebugMode = isDebug; // 디버그 모드 상태 업데이트
@@ -82,25 +82,25 @@ namespace ITM_Agent.Services
         {
             if (isRunning)
             {
-               logManager.LogEvent("[FileWatcherManager] File monitoring is already running.");
-               return;
+                logManager.LogEvent("[FileWatcherManager] File monitoring is already running.");
+                return;
             }
-            
+
             InitializeWatchers(); // 새로 초기화
-            
+
             foreach (var watcher in watchers)
             {
-               watcher.EnableRaisingEvents = true; // 이벤트 활성화
+                watcher.EnableRaisingEvents = true; // 이벤트 활성화
             }
-            
+
             isRunning = true; // 상태 업데이트
             logManager.LogEvent("[FileWatcherManager] File monitoring started.");
             if (settingsManager.IsDebugMode)
             {
-               logManager.LogDebug(
-                   $"[FileWatcherManager] Monitoring {watchers.Count} folder(s): " +
-                   $"{string.Join(", ", watchers.Select(w => w.Path))}"
-               );
+                logManager.LogDebug(
+                    $"[FileWatcherManager] Monitoring {watchers.Count} folder(s): " +
+                    $"{string.Join(", ", watchers.Select(w => w.Path))}"
+                );
             }
         }
 
