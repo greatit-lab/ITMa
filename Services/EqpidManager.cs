@@ -1,23 +1,25 @@
 // Services\EqpidManager.cs
 using System;
+using System.Collections.Concurrent; // ★ ConcurrentDictionary 사용
 using System.Windows.Forms;
-//using MySql.Data.MySqlClient;  // ☒ MySql 드라이버 제거
-using Npgsql;                 // ☑ PostgreSQL 드라이버 추가
-using ConnectInfo;            // DatabaseInfo 참조 (변경 없음)
+using Npgsql;
+using ConnectInfo;
 using System.Globalization;
 using System.Management;
 
 namespace ITM_Agent.Services
 {
     /// <summary>
-    /// Eqpid 값을 관리하는 클래스입니다.
-    /// 설정 파일(Settings.ini)에 [Eqpid] 섹션이 없거나 값이 없을 경우 EqpidInputForm을 통해 장비명을 입력받아 저장합니다.
+    /// Eqpid 및 관련 장비 정보를 관리하는 클래스입니다.
     /// </summary>
     public class EqpidManager
     {
         private readonly SettingsManager settingsManager;
         private readonly LogManager logManager;
         private readonly string appVersion;
+
+        // ★ 장비별 타임존 정보를 캐싱하여 DB 조회를 최소화합니다.
+        private static readonly ConcurrentDictionary<string, TimeZoneInfo> timezoneCache = new ConcurrentDictionary<string, TimeZoneInfo>();
 
         public EqpidManager(SettingsManager settings, LogManager logManager, string appVersion)
         {
@@ -26,10 +28,55 @@ namespace ITM_Agent.Services
             this.appVersion = appVersion ?? throw new ArgumentNullException(nameof(appVersion));
         }
 
+      public TimeZoneInfo GetTimezoneForEqpid(string eqpid)
+        {
+            // 1. 캐시에 정보가 있으면 즉시 반환
+            if (timezoneCache.TryGetValue(eqpid, out TimeZoneInfo cachedZone))
+            {
+                return cachedZone;
+            }
+
+            // 2. 캐시에 없으면 DB에서 조회
+            TimeZoneInfo fetchedZone = null;
+            string timezoneId = null;
+            try
+            {
+                string cs = DatabaseInfo.CreateDefault().GetConnectionString();
+                using (var conn = new NpgsqlConnection(cs))
+                {
+                    conn.Open();
+                    using (var cmd = new NpgsqlCommand("SELECT timezone FROM public.agent_info WHERE eqpid = @eqpid LIMIT 1", conn))
+                    {
+                        cmd.Parameters.AddWithValue("@eqpid", eqpid);
+                        var result = cmd.ExecuteScalar();
+                        if (result != null && result != DBNull.Value)
+                        {
+                            timezoneId = result.ToString();
+                        }
+                    }
+                }
+
+                if (!string.IsNullOrEmpty(timezoneId))
+                {
+                    fetchedZone = TimeZoneInfo.FindSystemTimeZoneById(timezoneId);
+                    // 조회 성공 시 캐시에 저장
+                    timezoneCache.TryAdd(eqpid, fetchedZone);
+                }
+            }
+            catch (Exception ex)
+            {
+                logManager.LogError($"[EqpidManager] Failed to fetch timezone for {eqpid}: {ex.Message}");
+                // 실패 시 시스템 기본 타임존으로 대체
+                return TimeZoneInfo.Local;
+            }
+
+            return fetchedZone ?? TimeZoneInfo.Local;
+        }
+
         public void InitializeEqpid()
         {
             logManager.LogEvent("[EqpidManager] Initializing Eqpid.");
-            
+
             string eqpid = settingsManager.GetEqpid();
             if (string.IsNullOrEmpty(eqpid))
             {
@@ -45,7 +92,7 @@ namespace ITM_Agent.Services
         private void PromptForEqpid()
         {
             bool isValidInput = false;
-        
+
             while (!isValidInput)
             {
                 using (var form = new EqpidInputForm())
@@ -58,15 +105,13 @@ namespace ITM_Agent.Services
                         settingsManager.SetEqpid(form.Eqpid.ToUpper());
                         settingsManager.SetType(form.Type);
                         logManager.LogEvent($"[EqpidManager] Type set to: {form.Type}");
-                        
-                        // 여기서 DB 업로드를 호출
+
+                        /* DB 업로드 */
                         UploadAgentInfoToDatabase(form.Eqpid.ToUpper(), form.Type);
-        
                         isValidInput = true;
                     }
                     else if (result == DialogResult.Cancel)
                     {
-                        // (기존 코드)
                         logManager.LogEvent("[EqpidManager] Eqpid input canceled. Application will exit.");
                         MessageBox.Show("Eqpid 입력이 취소되었습니다. 애플리케이션을 종료합니다.",
                                         "알림", MessageBoxButtons.OK, MessageBoxIcon.Information);
@@ -75,34 +120,32 @@ namespace ITM_Agent.Services
                 }
             }
         }
-        
-        /// <summary>
-        /// Eqpid와 Type, 그리고 PC 시스템 정보를 DB에 업로드하는 메서드
-        /// </summary>
+
         private void UploadAgentInfoToDatabase(string eqpid, string type)
         {
             /* 0) 연결 문자열 */
             string connString = DatabaseInfo.CreateDefault().GetConnectionString();
-        
+
             /* 1) 시스템 정보 수집 */
             string osVersion = SystemInfoCollector.GetOSVersion();
             string architecture = SystemInfoCollector.GetArchitecture();
             string machineName = SystemInfoCollector.GetMachineName();
             string locale = SystemInfoCollector.GetLocale();
-            string timeZone = SystemInfoCollector.GetTimeZone();
+            string timeZone = SystemInfoCollector.GetTimeZoneId();
             //string pcNow = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss");
             DateTime pcNow = DateTime.Now;    // 그대로 DateTime
-            
+
             try
             {
-                using (var conn = new NpgsqlConnection(connString))     // ☑ NpgsqlConnection
+                using (var conn = new NpgsqlConnection(connString))
                 {
                     conn.Open();
-        
+
                     /* 2) 기존 레코드 존재 여부 확인 */
                     const string SELECT_SQL = @"
                         SELECT COUNT(*) FROM public.agent_info
                         WHERE eqpid = @eqpid AND pc_name = @pc_name;";
+
                     int existingRecords = 0;
                     using (var selCmd = new NpgsqlCommand(SELECT_SQL, conn))
                     {
@@ -110,14 +153,14 @@ namespace ITM_Agent.Services
                         selCmd.Parameters.AddWithValue("@pc_name", machineName);
                         existingRecords = Convert.ToInt32(selCmd.ExecuteScalar());
                     }
-                    
+
                     if (existingRecords > 0)
                     {
                         logManager.LogEvent(
                             $"[EqpidManager] Entry already exists for Eqpid={eqpid}, PC={machineName}. Skipping upload.");
                         return;
                     }
-                    
+
                     /* 3) INSERT … ON CONFLICT → UPSERT */
                     const string INSERT_SQL = @"
                         INSERT INTO public.agent_info
@@ -147,7 +190,7 @@ namespace ITM_Agent.Services
                         insCmd.Parameters.AddWithValue("@app_ver", appVersion);
                         //insCmd.Parameters.AddWithValue("@pc_now", pcNow);
                         insCmd.Parameters.Add("@pc_now", NpgsqlTypes.NpgsqlDbType.Timestamp).Value = pcNow;
-    
+
                         int rows = insCmd.ExecuteNonQuery();
                         logManager.LogEvent($"[EqpidManager] DB 업로드 완료. (rows inserted/updated={rows})");
                     }
@@ -164,7 +207,7 @@ namespace ITM_Agent.Services
             }
         }
     }
-    
+
     public static class SystemInfoCollector
     {
         public static string GetOSVersion()
@@ -183,7 +226,7 @@ namespace ITM_Agent.Services
             }
             return "Unknown OS";
         }
-    
+
         public static string GetArchitecture() => 
             Environment.Is64BitOperatingSystem ? "64-bit" : "32-bit";
 
@@ -191,6 +234,7 @@ namespace ITM_Agent.Services
 
         public static string GetLocale() => CultureInfo.CurrentUICulture.Name;
 
-        public static string GetTimeZone() => TimeZoneInfo.Local.StandardName;
+        // ★ 수정: TimeZone의 StandardName 대신 ID를 반환하도록 수정
+        public static string GetTimeZoneId() => TimeZoneInfo.Local.Id;
     }
 }
