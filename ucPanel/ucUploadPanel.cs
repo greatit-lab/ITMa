@@ -792,7 +792,10 @@ namespace ITM_Agent.ucPanel
                     NotifyFilter = NotifyFilters.FileName | NotifyFilters.Size | NotifyFilters.LastWrite,
                     EnableRaisingEvents = true
                 };
+
+                // [수정] Created 이벤트와 함께 Changed 이벤트도 감시하도록 핸들러 추가
                 preAlignFolderWatcher.Created += PreAlignFolderWatcher_Event;
+                preAlignFolderWatcher.Changed += PreAlignFolderWatcher_Event; // ★ 수정된 내용
 
                 logManager.LogEvent($"[UploadPanel] Pre-Align 폴더 감시 시작: {folderPath}");
             }
