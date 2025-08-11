@@ -1,18 +1,18 @@
 // Library\IOnto_ErrorData.cs
 using System;
 using System.Collections.Generic;
-using System.Data;                 // [추가]
-using System.Globalization;        // [추가]
+using System.Data;
+using System.Globalization;
 using System.IO;
-using System.Linq;                 // [추가]
+using System.Linq;
 using System.Text;
 using System.Text.RegularExpressions;
 using System.Threading;
-using Npgsql;                      // [추가]
-using ConnectInfo;                 // [추가]
-using ITM_Agent.Services;          // [추가] (타임싱크 등 공용 서비스와 호환 목적)
+using Npgsql;
+using ConnectInfo;
+using ITM_Agent.Services;
 
-namespace ErrorDataLib  // [추가] 새 라이브러리 네임스페이스
+namespace ErrorDataLib
 {
     /*──────────────────────── Logger ───────────────────────*/
     internal static class SimpleLogger
@@ -54,15 +54,15 @@ namespace ErrorDataLib  // [추가] 새 라이브러리 네임스페이스
     public class Onto_ErrorData : IOnto_ErrorData
     {
         /* 상태값/상수 */
-        private FileSystemWatcher _fw;                                        // [추가]
-        private DateTime _lastEvt = DateTime.MinValue;                        // [추가] debounce
-        private static readonly Dictionary<string, long> _lastLen =           // [추가] 파일 길이 캐시
+        private FileSystemWatcher _fw;
+        private DateTime _lastEvt = DateTime.MinValue;
+        private static readonly Dictionary<string, long> _lastLen =
             new Dictionary<string, long>(StringComparer.OrdinalIgnoreCase);
 
-        private readonly string _pluginName = "Onto_ErrorData";               // [추가]
-        public string PluginName { get { return _pluginName; } }              // [추가]
+        private readonly string _pluginName = "Onto_ErrorData";
+        public string PluginName { get { return _pluginName; } }
 
-        static Onto_ErrorData()                                               // [추가] CP949 인코딩 등록
+        static Onto_ErrorData()
         {
 #if NETCOREAPP || NET5_0_OR_GREATER
             Encoding.RegisterProvider(CodePagesEncodingProvider.Instance);
@@ -76,18 +76,18 @@ namespace ErrorDataLib  // [추가] 새 라이브러리 네임스페이스
             SimpleLogger.Event("Process ▶ " + filePath);
 
             // 파일 준비 대기 (잠금 해제까지 재시도)
-            if (!WaitForFileReady(filePath, 20, 500))                         // [추가]
+            if (!WaitForFileReady(filePath, 20, 500))
             {
                 SimpleLogger.Event("SKIP – file still not ready ▶ " + filePath);
                 return;
             }
 
             // Eqpid 로드
-            string eqpid = GetEqpidFromSettings("Settings.ini");              // [추가]
+            string eqpid = GetEqpidFromSettings("Settings.ini");
 
             try
             {
-                ProcessFile(filePath, eqpid);                                 // [추가]
+                ProcessFile(filePath, eqpid);
             }
             catch (Exception ex)
             {
@@ -107,14 +107,14 @@ namespace ErrorDataLib  // [추가] 새 라이브러리 네임스페이스
 
             _fw = new FileSystemWatcher(folderPath)
             {
-                NotifyFilter = NotifyFilters.FileName | NotifyFilters.LastWrite,   // [추가]
-                Filter = "*.log",                                                  // [추가] 확장자 고정(필요 시 변경)
+                NotifyFilter = NotifyFilters.FileName | NotifyFilters.LastWrite,
+                Filter = "*.log",
                 IncludeSubdirectories = false,
                 EnableRaisingEvents = true
             };
 
-            _fw.Created += OnChanged;   // [추가]
-            _fw.Changed += OnChanged;   // [추가]
+            _fw.Created += OnChanged;
+            _fw.Changed += OnChanged;
 
             SimpleLogger.Event("Watcher started ▶ " + folderPath);
         }
@@ -164,27 +164,89 @@ namespace ErrorDataLib  // [추가] 새 라이브러리 네임스페이스
         #endregion
 
         #region === Core ===
-        private void ProcessFile(string filePath, string eqpid)
+        private void ProcessFile(string filePath, string eqpid) // [수정]
         {
-            // 1) 텍스트 로드 (CP949)
-            string raw = File.ReadAllText(filePath, Encoding.GetEncoding(949));    // [추가]
+            string raw = File.ReadAllText(filePath, Encoding.GetEncoding(949));                   // [유지]
+            var lines = raw.Split(new[] { "\r\n", "\n" }, StringSplitOptions.RemoveEmptyEntries); // [유지]
+            var meta = ParseMeta(lines);                                                          // [유지]
+            if (!meta.ContainsKey("EqpId")) meta["EqpId"] = eqpid;                                // [유지]
+        
+            var infoTable = BuildInfoDataTable(meta);                                            // [유지]
+            UploadItmInfoUpsert(infoTable);                                                      // [추가] 장비당 1건 업서트
+        
+            var errorTable = BuildErrorDataTable(lines, eqpid);                                   // [유지]
+            if (errorTable.Rows.Count > 0)
+                UploadDataTable(errorTable, "plg_error");                                         // [수정] 테이블명: error → plg_error
+        
+            SimpleLogger.Event("Done ▶ " + Path.GetFileName(filePath));                           // [유지]
+        }
 
-            // 2) 라인 분리
-            string[] lines = raw.Split(new[] { "\r\n", "\n" }, StringSplitOptions.RemoveEmptyEntries);
-
-            // 3) 상단 Info 블럭 파싱
-            var meta = ParseMeta(lines);                                           // [추가]
-            if (!meta.ContainsKey("EqpId")) meta["EqpId"] = eqpid;                 // [추가]
-
-            // 4) itm_info 업로드(변경 시에만)
-            DataTable infoDt = BuildInfoDataTable(meta);                           // [추가]
-            if (IsInfoChanged(infoDt)) UploadDataTable(infoDt, "itm_info");        // [추가]
-            else SimpleLogger.Event("itm_info unchanged ▶ skip");
-
-            // 5) error 업로드(전행 업로드)
-            DataTable errorDt = BuildErrorDataTable(lines, eqpid);                 // [추가]
-            if (errorDt.Rows.Count > 0) UploadDataTable(errorDt, "error");
-            SimpleLogger.Event("Done ▶ " + Path.GetFileName(filePath));
+        private void UploadItmInfoUpsert(DataTable dt) // [추가]
+        {
+            if (dt == null || dt.Rows.Count == 0) return;
+        
+            var r = dt.Rows[0];
+            string cs = DatabaseInfo.CreateDefault().GetConnectionString();
+        
+            const string SQL = @"
+                INSERT INTO public.itm_info
+                    (eqpid, system_name, system_model, serial_num, application, version, db_version, customer, ""date"")
+                VALUES
+                    (@eqpid, @system_name, @system_model, @serial_num, @application, @version, @db_version, @customer, @date)
+                ON CONFLICT (eqpid) DO UPDATE
+                SET
+                    system_name  = EXCLUDED.system_name,
+                    system_model = EXCLUDED.system_model,
+                    serial_num   = EXCLUDED.serial_num,
+                    application  = EXCLUDED.application,
+                    version      = EXCLUDED.version,
+                    db_version   = EXCLUDED.db_version,
+                    customer     = EXCLUDED.customer,
+                    ""date""      = EXCLUDED.""date"",
+                    serv_ts      = NOW()
+                WHERE
+                    (itm_info.system_name  IS DISTINCT FROM EXCLUDED.system_name)  OR
+                    (itm_info.system_model IS DISTINCT FROM EXCLUDED.system_model) OR
+                    (itm_info.serial_num   IS DISTINCT FROM EXCLUDED.serial_num)   OR
+                    (itm_info.application  IS DISTINCT FROM EXCLUDED.application)  OR
+                    (itm_info.version      IS DISTINCT FROM EXCLUDED.version)      OR
+                    (itm_info.db_version   IS DISTINCT FROM EXCLUDED.db_version)   OR
+                    (itm_info.customer     IS DISTINCT FROM EXCLUDED.customer)     OR
+                    (itm_info.""date""      IS DISTINCT FROM EXCLUDED.""date"");
+                ";
+        
+            using (var conn = new NpgsqlConnection(cs))
+            {
+                conn.Open();
+                using (var cmd = new NpgsqlCommand(SQL, conn))
+                {
+                    cmd.Parameters.AddWithValue("@eqpid",       r["eqpid"]        ?? (object)DBNull.Value);
+                    cmd.Parameters.AddWithValue("@system_name", r["system_name"]  ?? (object)DBNull.Value);
+                    cmd.Parameters.AddWithValue("@system_model",r["system_model"] ?? (object)DBNull.Value);
+                    cmd.Parameters.AddWithValue("@serial_num",  r["serial_num"]   ?? (object)DBNull.Value);
+                    cmd.Parameters.AddWithValue("@application", r["application"]  ?? (object)DBNull.Value);
+                    cmd.Parameters.AddWithValue("@version",     r["version"]      ?? (object)DBNull.Value);
+                    cmd.Parameters.AddWithValue("@db_version",  r["db_version"]   ?? (object)DBNull.Value);
+                    cmd.Parameters.AddWithValue("@customer",    r["customer"]     ?? (object)DBNull.Value);
+        
+                    object dateParam = DBNull.Value;
+                    var dv = r["date"];
+                    if (dv != null && dv != DBNull.Value)
+                    {
+                        DateTime dtParsed;
+                        if (DateTime.TryParseExact(dv.ToString(), "yyyy-MM-dd HH:mm:ss",
+                            System.Globalization.CultureInfo.InvariantCulture,
+                            System.Globalization.DateTimeStyles.None, out dtParsed))
+                            dateParam = dtParsed;
+                        else
+                            dateParam = dv.ToString();
+                    }
+                    cmd.Parameters.AddWithValue("@date", dateParam);
+        
+                    cmd.ExecuteNonQuery();
+                }
+            }
+            SimpleLogger.Event("itm_info upsert OK ▶ eqpid=" + r["eqpid"]);
         }
 
         // 파일 상단의 "키:," 형태 메타데이터 파싱 + DATE 형식 변환
