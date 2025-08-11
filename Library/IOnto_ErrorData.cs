@@ -459,10 +459,10 @@ namespace ErrorDataLib
         // itm_info 변경 여부 판단 (DATE 제외)
         private bool IsInfoChanged(DataTable dt)
         {
-            if (dt == null || dt.Rows.Count == 0) return false;                                      
+            if (dt == null || dt.Rows.Count == 0) return false;
             var r = dt.Rows[0];
 
-            string cs = DatabaseInfo.CreateDefault().GetConnectionString();                           
+            string cs = DatabaseInfo.CreateDefault().GetConnectionString();
             const string SQL = @"
                 SELECT 1
                 FROM public.itm_info
