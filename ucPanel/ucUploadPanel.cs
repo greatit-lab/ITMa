@@ -126,33 +126,22 @@ namespace ITM_Agent.ucPanel
 
             if (itemName == "WaferFlat")
             {
-                if (!cb_WaferFlat_Path.Items.Contains(folderPath)) cb_WaferFlat_Path.Items.Add(folderPath);
-                cb_WaferFlat_Path.Text = folderPath;
-
-                if (!cb_FlatPlugin.Items.Contains(pluginName)) cb_FlatPlugin.Items.Add(pluginName);
-                cb_FlatPlugin.Text = pluginName;
-
-                StartUploadFolderWatcher(folderPath);
+                AddPathToCombo(cb_WaferFlat_Path, folderPath);
+                AddPathToCombo(cb_FlatPlugin, pluginName);
+                StartUploadFolderWatcher(NormalizePath(folderPath));
             }
             else if (itemName == "PreAlign")
             {
-                if (!cb_PreAlign_Path.Items.Contains(folderPath)) cb_PreAlign_Path.Items.Add(folderPath);
-                cb_PreAlign_Path.Text = folderPath;
-
-                if (!cb_PreAlignPlugin.Items.Contains(pluginName)) cb_PreAlignPlugin.Items.Add(pluginName);
-                cb_PreAlignPlugin.Text = pluginName;
-
-                StartPreAlignFolderWatcher(folderPath);
+                AddPathToCombo(cb_PreAlign_Path, folderPath);
+                AddPathToCombo(cb_PreAlignPlugin, pluginName);
+                StartPreAlignFolderWatcher(NormalizePath(folderPath));
             }
             else if (itemName == "Error")
             {
-                if (!cb_ErrPath.Items.Contains(folderPath)) cb_ErrPath.Items.Add(folderPath);
-                cb_ErrPath.Text = folderPath;
-
-                if (!cb_ErrPlugin.Items.Contains(pluginName)) cb_ErrPlugin.Items.Add(pluginName);
-                cb_ErrPlugin.Text = pluginName;
-
-                StartErrFolderWatcher(folderPath);
+                AddPathToCombo(cb_ErrPath, folderPath);
+                AddPathToCombo(cb_ErrPlugin, pluginName);
+                DeduplicateComboItems(cb_ErrPath);
+                StartErrFolderWatcher(NormalizePath(folderPath));
             }
         }
 
@@ -173,6 +162,11 @@ namespace ITM_Agent.ucPanel
             cb_WaferFlat_Path.Items.AddRange(arr);
             cb_PreAlign_Path.Items.AddRange(arr);
             cb_ErrPath.Items.AddRange(arr);
+
+            // 로드 직후, 표준화 기준으로 중복 제거
+            DeduplicateComboItems(cb_WaferFlat_Path);
+            DeduplicateComboItems(cb_PreAlign_Path);
+            DeduplicateComboItems(cb_ErrPath);
         }
 
         // ucPluginPanel에서 로드한 플러그인(PluginListItem) 목록을 콤보박스에 로드
@@ -377,6 +371,7 @@ namespace ITM_Agent.ucPanel
         {
             DeduplicateComboItems(cb_WaferFlat_Path);
             DeduplicateComboItems(cb_PreAlign_Path);
+            DeduplicateComboItems(cb_ErrPath);
         }
 
         private void btn_FlatSet_Click(object sender, EventArgs e)
@@ -567,7 +562,7 @@ namespace ITM_Agent.ucPanel
 
             // ── 3) Error  [추가]
             if (cb_ErrPlugin.Items.Contains(pluginName))
-                cb_ErrPlugin.Items.Remove(pluginName);a
+                cb_ErrPlugin.Items.Remove(pluginName);
             if (isErrSelected)
             {
                 cb_ErrPlugin.SelectedIndex = -1; cb_ErrPlugin.Text = string.Empty;
