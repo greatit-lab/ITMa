@@ -162,10 +162,13 @@ namespace ITM_Agent.ucPanel
             // ① Settings.ini 동기화
             settingsManager.IsDebugMode = isDebug;
 
-            // ② LogManager 전체에 반영
+            // ② 메인 로거 전역 플래그
             LogManager.GlobalDebugEnabled = isDebug;
 
-            // ③ MainForm 알림
+            /* [추가] ③ 모든 플러그인(SimpleLogger)에 Debug 모드 일괄 전파 (플러그인명 미지정) */
+            ITM_Agent.Services.LogManager.BroadcastPluginDebug(isDebug);
+
+            // ④ MainForm 등 외부 알림(기존 이벤트 유지)
             DebugModeChanged?.Invoke(isDebug);
         }
     }
