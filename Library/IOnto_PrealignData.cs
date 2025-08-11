@@ -18,22 +18,30 @@ namespace PrealignDataLib
     /*──────────────────────── Logger ────────────────────────*/
     internal static class SimpleLogger
     {
+        private static volatile bool _debugEnabled = false;
+        public static void SetDebugMode(bool enable) { _debugEnabled = enable; }
+
         private static readonly object _sync = new object();
-        private static readonly string _dir = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Logs");
-        private static string PathOf(string sfx) => Path.Combine(_dir, $"{DateTime.Now:yyyyMMdd}_{sfx}.log");
+        private static readonly string _dir = System.IO.Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Logs");
+        private static string PathOf(string sfx) => System.IO.Path.Combine(_dir, $"{DateTime.Now:yyyyMMdd}_{sfx}.log");
 
         private static void Write(string s, string m)
         {
             lock (_sync)
             {
-                Directory.CreateDirectory(_dir);
+                System.IO.Directory.CreateDirectory(_dir);
                 string line = $"{DateTime.Now:yyyy-MM-dd HH:mm:ss.fff} [Prealign] {m}{Environment.NewLine}";
-                try { File.AppendAllText(PathOf(s), line, Encoding.UTF8); } catch { }
+                try { System.IO.File.AppendAllText(PathOf(s), line, System.Text.Encoding.UTF8); }
+                catch { /* 로깅 실패 무시 */ }
             }
         }
-        public static void Event(string m) => Write("event", m);
-        public static void Error(string m) => Write("error", m);
-        public static void Debug(string m) => Write("debug", m);
+
+        public static void Event(string m) { Write("event", m); }
+        public static void Error(string m) { Write("error", m); }
+        public static void Debug(string m)
+        {
+            if (_debugEnabled) Write("debug", m);
+        }
     }
 
     /*──────────────────────── Interface ─────────────────────*/
