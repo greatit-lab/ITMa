@@ -184,11 +184,10 @@ namespace ErrorDataLib
         private void UploadItmInfoUpsert(DataTable dt)
         {
             if (dt == null || dt.Rows.Count == 0) return;
-        
+
             var r = dt.Rows[0];
             string cs = DatabaseInfo.CreateDefault().GetConnectionString();
-        
-            // [수정] customer 컬럼 제거, serv_ts 파라미터로 보정값(초단위) 전달
+
             const string SQL = @"
                 INSERT INTO public.itm_info
                     (eqpid, system_name, system_model, serial_num, application, version, db_version, ""date"", serv_ts)  -- [수정]
@@ -213,7 +212,7 @@ namespace ErrorDataLib
                     (itm_info.db_version   IS DISTINCT FROM EXCLUDED.db_version)   OR
                     (itm_info.""date""      IS DISTINCT FROM EXCLUDED.""date"");
                 ";
-        
+
             // [추가] 보정 기준 시각: date 파싱 성공 시 그 값을, 실패 시 현재 시각
             DateTime srcDate = DateTime.Now;                                  // [추가]
             var dv = r["date"];                                               // [추가]
@@ -229,19 +228,19 @@ namespace ErrorDataLib
             // 밀리초 절삭(초단위 저장)
             srv = new DateTime(srv.Year, srv.Month, srv.Day,                  // [추가]
                                srv.Hour, srv.Minute, srv.Second);
-        
+
             using (var conn = new NpgsqlConnection(cs))
             {
                 conn.Open();
                 using (var cmd = new NpgsqlCommand(SQL, conn))
                 {
-                    cmd.Parameters.AddWithValue("@eqpid",       r["eqpid"]        ?? (object)DBNull.Value);
-                    cmd.Parameters.AddWithValue("@system_name", r["system_name"]  ?? (object)DBNull.Value);
-                    cmd.Parameters.AddWithValue("@system_model",r["system_model"] ?? (object)DBNull.Value);
-                    cmd.Parameters.AddWithValue("@serial_num",  r["serial_num"]   ?? (object)DBNull.Value);
-                    cmd.Parameters.AddWithValue("@application", r["application"]  ?? (object)DBNull.Value);
-                    cmd.Parameters.AddWithValue("@version",     r["version"]      ?? (object)DBNull.Value);
-                    cmd.Parameters.AddWithValue("@db_version",  r["db_version"]   ?? (object)DBNull.Value);
+                    cmd.Parameters.AddWithValue("@eqpid", r["eqpid"] ?? (object)DBNull.Value);
+                    cmd.Parameters.AddWithValue("@system_name", r["system_name"] ?? (object)DBNull.Value);
+                    cmd.Parameters.AddWithValue("@system_model", r["system_model"] ?? (object)DBNull.Value);
+                    cmd.Parameters.AddWithValue("@serial_num", r["serial_num"] ?? (object)DBNull.Value);
+                    cmd.Parameters.AddWithValue("@application", r["application"] ?? (object)DBNull.Value);
+                    cmd.Parameters.AddWithValue("@version", r["version"] ?? (object)DBNull.Value);
+                    cmd.Parameters.AddWithValue("@db_version", r["db_version"] ?? (object)DBNull.Value);
         
                     object dateParam = DBNull.Value;
                     if (dv != null && dv != DBNull.Value)
@@ -253,9 +252,9 @@ namespace ErrorDataLib
                         else
                             dateParam = dv.ToString();
                     }
-                    cmd.Parameters.AddWithValue("@date",     dateParam);       // [수정]
-                    cmd.Parameters.AddWithValue("@serv_ts",  srv);             // [추가]
-        
+                    cmd.Parameters.AddWithValue("@date", dateParam);
+                    cmd.Parameters.AddWithValue("@serv_ts", srv);
+
                     cmd.ExecuteNonQuery();
                 }
             }
@@ -308,10 +307,9 @@ namespace ErrorDataLib
                 ["APPLICATION"] = "application",
                 ["VERSION"] = "version",
                 ["DB_VERSION"] = "db_version",
-                // ["CUSTOMER"] = "customer",                    // [삭제] 고객 컬럼 적재 제외
                 ["EqpId"] = "eqpid"
             };
-        
+
             var dt = new DataTable();
             foreach (var c in map.Values) dt.Columns.Add(c, typeof(string));
             var dr = dt.NewRow();
@@ -337,16 +335,16 @@ namespace ErrorDataLib
                 new DataColumn("extra_message_2", typeof(string)),
                 new DataColumn("serv_ts", typeof(DateTime))                 // [추가] 보정된 서버시각(초단위)
             });
-        
+
             var rg = new Regex(
                 @"^(?<id>\w+),\s*(?<ts>[^,]+),\s*(?<lbl>[^,]+),\s*(?<desc>[^,]+),\s*(?<ms>\d+)(?:,\s*(?<extra>.*))?",
                 RegexOptions.Compiled);
-        
+
             foreach (var ln in lines)
             {
                 var m = rg.Match(ln);
                 if (!m.Success) continue;
-        
+
                 DateTime parsedTs;
                 bool okTs = DateTime.TryParseExact(
                     m.Groups["ts"].Value.Trim(),
@@ -354,28 +352,28 @@ namespace ErrorDataLib
                     CultureInfo.InvariantCulture,
                     DateTimeStyles.None,
                     out parsedTs);
-        
+
                 var dr = dt.NewRow();
                 dr["eqpid"] = eqpid;
                 dr["error_id"] = m.Groups["id"].Value.Trim();
-                if (okTs) dr["time_stamp"] = parsedTs;                      // [유지]
+                if (okTs) dr["time_stamp"] = parsedTs;
                 dr["error_label"] = m.Groups["lbl"].Value.Trim();
-                dr["error_desc"]  = m.Groups["desc"].Value.Trim();
-        
+                dr["error_desc"] = m.Groups["desc"].Value.Trim();
+
                 int ms;
                 if (int.TryParse(m.Groups["ms"].Value, out ms)) dr["millisecond"] = ms;
-        
+
                 dr["extra_message_1"] = m.Groups["extra"].Value.Trim();
                 dr["extra_message_2"] = "";
-        
+
                 // [추가] serv_ts = 보정 + 밀리초 절삭
-                var basis = okTs ? parsedTs : DateTime.Now;                 // [추가]
-                var srv   = ITM_Agent.Services.TimeSyncProvider
-                                .Instance.ToSynchronizedKst(basis);         // [추가]
-                srv = new DateTime(srv.Year, srv.Month, srv.Day,            // [추가]
+                var basis = okTs ? parsedTs : DateTime.Now;
+                var srv = ITM_Agent.Services.TimeSyncProvider
+                                .Instance.ToSynchronizedKst(basis);
+                srv = new DateTime(srv.Year, srv.Month, srv.Day,
                                    srv.Hour, srv.Minute, srv.Second);
-                dr["serv_ts"] = srv;                                        // [추가]
-        
+                dr["serv_ts"] = srv;
+
                 dt.Rows.Add(dr);
             }
             return dt;
@@ -408,14 +406,14 @@ namespace ErrorDataLib
                 conn.Open();
                 using (var cmd = new NpgsqlCommand(SQL, conn))
                 {
-                    cmd.Parameters.AddWithValue("@sn",   r["system_name"] ?? (object)DBNull.Value);
-                    cmd.Parameters.AddWithValue("@sm",   r["system_model"] ?? (object)DBNull.Value);
-                    cmd.Parameters.AddWithValue("@snm",  r["serial_num"]   ?? (object)DBNull.Value);
-                    cmd.Parameters.AddWithValue("@app",  r["application"]  ?? (object)DBNull.Value);
-                    cmd.Parameters.AddWithValue("@ver",  r["version"]      ?? (object)DBNull.Value);
-                    cmd.Parameters.AddWithValue("@dbv",  r["db_version"]   ?? (object)DBNull.Value);
-                    cmd.Parameters.AddWithValue("@cust", r["customer"]     ?? (object)DBNull.Value);
-                    cmd.Parameters.AddWithValue("@eqp",  r["eqpid"]        ?? (object)DBNull.Value);
+                    cmd.Parameters.AddWithValue("@sn", r["system_name"] ?? (object)DBNull.Value);
+                    cmd.Parameters.AddWithValue("@sm", r["system_model"] ?? (object)DBNull.Value);
+                    cmd.Parameters.AddWithValue("@snm", r["serial_num"] ?? (object)DBNull.Value);
+                    cmd.Parameters.AddWithValue("@app", r["application"] ?? (object)DBNull.Value);
+                    cmd.Parameters.AddWithValue("@ver", r["version"] ?? (object)DBNull.Value);
+                    cmd.Parameters.AddWithValue("@dbv", r["db_version"] ?? (object)DBNull.Value);
+                    cmd.Parameters.AddWithValue("@cust", r["customer"] ?? (object)DBNull.Value);
+                    cmd.Parameters.AddWithValue("@eqp", r["eqpid"] ?? (object)DBNull.Value);
 
                     object o = cmd.ExecuteScalar();
                     // 기존 행이 없으면 "변경됨"으로 간주 → 업로드
@@ -437,8 +435,8 @@ namespace ErrorDataLib
                 using (var tx = conn.BeginTransaction())
                 {
                     // 1) 컬럼/파라미터 목록 생성
-                    var cols = dt.Columns.Cast<DataColumn>().Select(c => c.ColumnName).ToArray();                   // [추가]
-                    string colList   = string.Join(",", cols.Select(c => "\"" + c + "\""));
+                    var cols = dt.Columns.Cast<DataColumn>().Select(c => c.ColumnName).ToArray();
+                    string colList = string.Join(",", cols.Select(c => "\"" + c + "\""));
                     string paramList = string.Join(",", cols.Select(c => "@" + c));
 
                     string sql = string.Format("INSERT INTO public.{0} ({1}) VALUES ({2});", tableName, colList, paramList);
