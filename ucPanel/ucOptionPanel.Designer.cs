@@ -29,15 +29,15 @@ namespace ITM_Agent.ucPanel
         {
             this.chk_DebugMode = new System.Windows.Forms.CheckBox();
             this.groupBox1 = new System.Windows.Forms.GroupBox();
-            this.label1 = new System.Windows.Forms.Label();
-            this.groupBox2 = new System.Windows.Forms.GroupBox();
-            this.label2 = new System.Windows.Forms.Label();
-            this.chk_infoDel = new System.Windows.Forms.CheckBox();
-            this.label3 = new System.Windows.Forms.Label();
-            this.cb_info_Retention = new System.Windows.Forms.ComboBox();
-            this.label4 = new System.Windows.Forms.Label();
             this.label5 = new System.Windows.Forms.Label();
             this.chk_PerfoMode = new System.Windows.Forms.CheckBox();
+            this.label1 = new System.Windows.Forms.Label();
+            this.groupBox2 = new System.Windows.Forms.GroupBox();
+            this.label4 = new System.Windows.Forms.Label();
+            this.cb_info_Retention = new System.Windows.Forms.ComboBox();
+            this.label3 = new System.Windows.Forms.Label();
+            this.label2 = new System.Windows.Forms.Label();
+            this.chk_infoDel = new System.Windows.Forms.CheckBox();
             this.groupBox1.SuspendLayout();
             this.groupBox2.SuspendLayout();
             this.SuspendLayout();
@@ -65,6 +65,25 @@ namespace ITM_Agent.ucPanel
             this.groupBox1.TabStop = false;
             this.groupBox1.Text = "● Logging Option";
             // 
+            // label5
+            // 
+            this.label5.AutoSize = true;
+            this.label5.Location = new System.Drawing.Point(20, 66);
+            this.label5.Name = "label5";
+            this.label5.Size = new System.Drawing.Size(137, 12);
+            this.label5.TabIndex = 43;
+            this.label5.Text = "• Enable Debug Logging";
+            // 
+            // chk_PerfoMode
+            // 
+            this.chk_PerfoMode.AutoSize = true;
+            this.chk_PerfoMode.Location = new System.Drawing.Point(505, 31);
+            this.chk_PerfoMode.Name = "chk_PerfoMode";
+            this.chk_PerfoMode.Size = new System.Drawing.Size(15, 14);
+            this.chk_PerfoMode.TabIndex = 42;
+            this.chk_PerfoMode.UseVisualStyleBackColor = true;
+            this.chk_PerfoMode.CheckedChanged += new System.EventHandler(this.chk_PerfoMode_CheckedChanged);
+            // 
             // label1
             // 
             this.label1.AutoSize = true;
@@ -88,23 +107,22 @@ namespace ITM_Agent.ucPanel
             this.groupBox2.TabStop = false;
             this.groupBox2.Text = "● Data Retention Option";
             // 
-            // label2
+            // label4
             // 
-            this.label2.AutoSize = true;
-            this.label2.Location = new System.Drawing.Point(20, 33);
-            this.label2.Name = "label2";
-            this.label2.Size = new System.Drawing.Size(207, 12);
-            this.label2.TabIndex = 41;
-            this.label2.Text = "• Auto-delete [ .info] metadata files";
+            this.label4.AutoSize = true;
+            this.label4.Location = new System.Drawing.Point(554, 61);
+            this.label4.Name = "label4";
+            this.label4.Size = new System.Drawing.Size(33, 12);
+            this.label4.TabIndex = 44;
+            this.label4.Text = "days";
             // 
-            // chk_infoDel
+            // cb_info_Retention
             // 
-            this.chk_infoDel.AutoSize = true;
-            this.chk_infoDel.Location = new System.Drawing.Point(505, 31);
-            this.chk_infoDel.Name = "chk_infoDel";
-            this.chk_infoDel.Size = new System.Drawing.Size(15, 14);
-            this.chk_infoDel.TabIndex = 0;
-            this.chk_infoDel.UseVisualStyleBackColor = true;
+            this.cb_info_Retention.FormattingEnabled = true;
+            this.cb_info_Retention.Location = new System.Drawing.Point(471, 58);
+            this.cb_info_Retention.Name = "cb_info_Retention";
+            this.cb_info_Retention.Size = new System.Drawing.Size(77, 20);
+            this.cb_info_Retention.TabIndex = 43;
             // 
             // label3
             // 
@@ -115,41 +133,23 @@ namespace ITM_Agent.ucPanel
             this.label3.TabIndex = 42;
             this.label3.Text = "→ Retention period (days) before deletion";
             // 
-            // cb_info_Retention
+            // label2
             // 
-            this.cb_info_Retention.FormattingEnabled = true;
-            this.cb_info_Retention.Location = new System.Drawing.Point(471, 58);
-            this.cb_info_Retention.Name = "cb_info_Retention";
-            this.cb_info_Retention.Size = new System.Drawing.Size(77, 20);
-            this.cb_info_Retention.TabIndex = 43;
+            this.label2.AutoSize = true;
+            this.label2.Location = new System.Drawing.Point(20, 33);
+            this.label2.Name = "label2";
+            this.label2.Size = new System.Drawing.Size(380, 12);
+            this.label2.TabIndex = 41;
+            this.label2.Text = "• Auto-delete dated files (Baseline + subfolders; by filename date)";
             // 
-            // label4
+            // chk_infoDel
             // 
-            this.label4.AutoSize = true;
-            this.label4.Location = new System.Drawing.Point(554, 61);
-            this.label4.Name = "label4";
-            this.label4.Size = new System.Drawing.Size(33, 12);
-            this.label4.TabIndex = 44;
-            this.label4.Text = "days";
-            // 
-            // label5
-            // 
-            this.label5.AutoSize = true;
-            this.label5.Location = new System.Drawing.Point(20, 66);
-            this.label5.Name = "label5";
-            this.label5.Size = new System.Drawing.Size(137, 12);
-            this.label5.TabIndex = 43;
-            this.label5.Text = "• Enable Debug Logging";
-            // 
-            // chk_PerfoMode
-            // 
-            this.chk_PerfoMode.AutoSize = true;
-            this.chk_PerfoMode.Location = new System.Drawing.Point(505, 31);
-            this.chk_PerfoMode.Name = "chk_PerfoMode";
-            this.chk_PerfoMode.Size = new System.Drawing.Size(15, 14);
-            this.chk_PerfoMode.TabIndex = 42;
-            this.chk_PerfoMode.UseVisualStyleBackColor = true;
-            this.chk_PerfoMode.CheckedChanged += new System.EventHandler(this.chk_PerfoMode_CheckedChanged);   // [추가]
+            this.chk_infoDel.AutoSize = true;
+            this.chk_infoDel.Location = new System.Drawing.Point(505, 31);
+            this.chk_infoDel.Name = "chk_infoDel";
+            this.chk_infoDel.Size = new System.Drawing.Size(15, 14);
+            this.chk_infoDel.TabIndex = 0;
+            this.chk_infoDel.UseVisualStyleBackColor = true;
             // 
             // ucOptionPanel
             // 
@@ -164,7 +164,6 @@ namespace ITM_Agent.ucPanel
             this.groupBox2.ResumeLayout(false);
             this.groupBox2.PerformLayout();
             this.ResumeLayout(false);
-            
         }
 
         #endregion
