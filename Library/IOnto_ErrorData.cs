@@ -241,7 +241,7 @@ namespace ErrorDataLib
                     cmd.Parameters.AddWithValue("@application", r["application"] ?? (object)DBNull.Value);
                     cmd.Parameters.AddWithValue("@version", r["version"] ?? (object)DBNull.Value);
                     cmd.Parameters.AddWithValue("@db_version", r["db_version"] ?? (object)DBNull.Value);
-        
+
                     object dateParam = DBNull.Value;
                     if (dv != null && dv != DBNull.Value)
                     {
@@ -510,7 +510,7 @@ namespace ErrorDataLib
                 }
                 Thread.Sleep(delayMs);
             }
-            return false;                                                                 // [추가]
+            return false;
         }
 
         private string GetEqpidFromSettings(string iniPath)
