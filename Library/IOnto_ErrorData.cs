@@ -164,21 +164,103 @@ namespace ErrorDataLib
         #endregion
 
         #region === Core ===
-        private void ProcessFile(string filePath, string eqpid) // [수정]
+        private void ProcessFile(string filePath, string eqpid)
         {
-            string raw = File.ReadAllText(filePath, Encoding.GetEncoding(949));                   // [유지]
-            var lines = raw.Split(new[] { "\r\n", "\n" }, StringSplitOptions.RemoveEmptyEntries); // [유지]
-            var meta = ParseMeta(lines);                                                          // [유지]
-            if (!meta.ContainsKey("EqpId")) meta["EqpId"] = eqpid;                                // [유지]
+            // 파일 읽기 및 파싱 (기존 로직 유지)
+            string raw = File.ReadAllText(filePath, Encoding.GetEncoding(949));              
+            var lines = raw.Split(new[] { "\r\n", "\n" }, StringSplitOptions.RemoveEmptyEntries);
+            var meta = ParseMeta(lines);
+            if (!meta.ContainsKey("EqpId")) meta["EqpId"] = eqpid;
+        
+            // itm_info 업서트 (기존 로직)                                                
+            var infoTable = BuildInfoDataTable(meta);                                        
+            UploadItmInfoUpsert(infoTable);                                                  
+        
+            // Error 데이터 테이블 구성 (기존)                                             
+            var errorTable = BuildErrorDataTable(lines, eqpid);                              
+        
+            // [추가] 허용 Error ID 집합 로드
+            HashSet<string> allowSet = LoadErrorFilterSet();                                  
+        
+            // [추가] 필터링 적용 (허용 ID만 보존)
+            int matched, skipped;
+            DataTable filtered = ApplyErrorFilter(errorTable, allowSet, out matched, out skipped);
+        
+            // [추가] 필터링 결과 로그
+            SimpleLogger.Event(string.Format("ErrorFilter ▶ total={0}, matched={1}, skipped={2}",
+                                  errorTable != null ? errorTable.Rows.Count : 0, matched, skipped));
+        
+            // [수정] 허용된 행만 DB 적재
+            if (filtered != null && filtered.Rows.Count > 0)
+            {
+                UploadDataTable(filtered, "plg_error");
+            }
+            else
+            {
+                SimpleLogger.Event("No rows after filter ▶ plg_error");                       
+            }
+        
+            SimpleLogger.Event("Done ▶ " + Path.GetFileName(filePath));                       
+        }
 
-            var infoTable = BuildInfoDataTable(meta);                                            // [유지]
-            UploadItmInfoUpsert(infoTable);                                                      // [추가] 장비당 1건 업서트
+        // [추가] Error ID 정규화 (대소문자/공백 차이 제거)
+        private static string NormalizeErrorId(object v)
+        {
+            if (v == null || v == DBNull.Value) return string.Empty;                          
+            string s = v.ToString().Trim();                                                   
+            return s.ToUpperInvariant();
+        }
 
-            var errorTable = BuildErrorDataTable(lines, eqpid);                                   // [유지]
-            if (errorTable.Rows.Count > 0)
-                UploadDataTable(errorTable, "plg_error");                                         // [수정] 테이블명: error → plg_error
+        // [추가] public.err_severity_map 에서 허용 Error ID 집합 로드
+        private HashSet<string> LoadErrorFilterSet()
+        {
+            var set = new HashSet<string>(StringComparer.OrdinalIgnoreCase);                  
+            string cs = DatabaseInfo.CreateDefault().GetConnectionString();
 
-            SimpleLogger.Event("Done ▶ " + Path.GetFileName(filePath));                           // [유지]
+            const string SQL = @"SELECT error_id FROM public.err_severity_map;";              
+
+            using (var conn = new NpgsqlConnection(cs))                                       
+            {
+                conn.Open();
+                using (var cmd = new NpgsqlCommand(SQL, conn))                                
+                using (var rd = cmd.ExecuteReader())                                          
+                {
+                    while (rd.Read())
+                    {
+                        var id = rd.IsDBNull(0) ? string.Empty : rd.GetString(0);             
+                        id = NormalizeErrorId(id);
+                        if (!string.IsNullOrEmpty(id)) set.Add(id);
+                    }
+                }
+            }
+            return set;
+        }
+
+        // [추가] DataTable 필터링: 허용 Error ID만 남김
+        private DataTable ApplyErrorFilter(DataTable src, HashSet<string> allowSet, out int matched, out int skipped)
+        {
+            matched = 0; skipped = 0;
+            if (src == null || src.Rows.Count == 0 || allowSet == null || allowSet.Count == 0)
+            {
+                skipped = (src != null) ? src.Rows.Count : 0;                                 
+                return src != null ? src.Clone() : new DataTable();                           
+            }
+
+            var dst = src.Clone();
+            foreach (DataRow r in src.Rows)
+            {
+                string id = NormalizeErrorId(r["error_id"]);                                  
+                if (allowSet.Contains(id))                                                    
+                {
+                    dst.ImportRow(r);                                                         
+                    matched++;                                                                
+                }
+                else
+                {
+                    skipped++;                                                                
+                }
+            }
+            return dst;                                                                       
         }
 
         private void UploadItmInfoUpsert(DataTable dt)
@@ -423,9 +505,9 @@ namespace ErrorDataLib
         }
 
         // 공용 업로드 (WaferFlat/Prealign 스타일과 동일한 INSERT 루프)
-        private void UploadDataTable(DataTable dt, string tableName)
+        private int UploadDataTable(DataTable dt, string tableName)
         {
-            if (dt == null || dt.Rows.Count == 0) return;
+            if (dt == null || dt.Rows.Count == 0) return 0;
 
             string cs = DatabaseInfo.CreateDefault().GetConnectionString();
 
@@ -434,38 +516,40 @@ namespace ErrorDataLib
                 conn.Open();
                 using (var tx = conn.BeginTransaction())
                 {
-                    // 1) 컬럼/파라미터 목록 생성
                     var cols = dt.Columns.Cast<DataColumn>().Select(c => c.ColumnName).ToArray();
-                    string colList = string.Join(",", cols.Select(c => "\"" + c + "\""));
-                    string paramList = string.Join(",", cols.Select(c => "@" + c));
+                    string colList  = string.Join(",", cols.Select(c => "\"" + c + "\""));
+                    string paramList = string.Join(",", cols.Select(c => "@" + c));                    
 
-                    string sql = string.Format("INSERT INTO public.{0} ({1}) VALUES ({2});", tableName, colList, paramList);
+                    // [수정] 중복 시 예외 없이 건너뛰기
+                    string sql = string.Format(
+                        "INSERT INTO public.{0} ({1}) VALUES ({2}) ON CONFLICT DO NOTHING;",
+                        tableName, colList, paramList);
 
                     using (var cmd = new NpgsqlCommand(sql, conn, tx))
                     {
-                        // 2) 파라미터 미리 준비
                         foreach (var c in cols)
-                            cmd.Parameters.Add(new NpgsqlParameter("@" + c, DbType.Object));
+                            cmd.Parameters.Add(new NpgsqlParameter("@" + c, DbType.Object));           
 
-                        int ok = 0;
+                        int inserted = 0;                                                              
                         try
                         {
-                            // 3) DataTable → INSERT 루프
                             foreach (DataRow r in dt.Rows)
                             {
                                 foreach (var c in cols)
-                                    cmd.Parameters["@" + c].Value = r[c] ?? DBNull.Value;
+                                    cmd.Parameters["@" + c].Value = r[c] ?? DBNull.Value;              
 
-                                cmd.ExecuteNonQuery();
-                                ok++;
+                                int affected = cmd.ExecuteNonQuery();
+                                if (affected == 1) inserted++;
                             }
                             tx.Commit();
-                            SimpleLogger.Debug(string.Format("DB OK ▶ {0}, rows={1}", tableName, ok));
-                        }
-                        catch (PostgresException pex) when (pex.SqlState == "23505") // unique_violation
-                        {
-                            tx.Rollback();
-                            SimpleLogger.Event("Duplicate entry skipped ▶ " + tableName);
+
+                            int skipped = dt.Rows.Count - inserted;                                    
+                            SimpleLogger.Debug(
+                                string.Format("DB OK ▶ {0}, inserted={1}, total={2}", tableName, inserted, dt.Rows.Count));
+                            if (skipped > 0)
+                                SimpleLogger.Event("Duplicate entry skipped ▶ " + tableName + " (skipped=" + skipped + ")");
+
+                            return inserted;
                         }
                         catch (PostgresException pex)
                         {
@@ -477,11 +561,13 @@ namespace ErrorDataLib
                             foreach (NpgsqlParameter p in cmd.Parameters)
                                 sb.AppendLine(p.ParameterName + " = " + (p.Value ?? "NULL"));
                             SimpleLogger.Error("DB FAIL ▶ " + sb.ToString());
+                            return 0;
                         }
                         catch (Exception ex)
                         {
                             tx.Rollback();
                             SimpleLogger.Error("DB FAIL ▶ " + ex);
+                            return 0;
                         }
                     }
                 }
@@ -510,7 +596,7 @@ namespace ErrorDataLib
                 }
                 Thread.Sleep(delayMs);
             }
-            return false;
+            return false;                                                                 // [추가]
         }
 
         private string GetEqpidFromSettings(string iniPath)
