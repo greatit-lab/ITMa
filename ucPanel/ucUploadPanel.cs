@@ -30,10 +30,12 @@ namespace ITM_Agent.ucPanel
         // 업로드 대상 폴더 감시용 FileSystemWatcher
         private FileSystemWatcher uploadFolderWatcher;
         private FileSystemWatcher preAlignFolderWatcher;   // Pre-Align 폴더 감시용
+        private FileSystemWatcher errFolderWatcher;
 
         private const string UploadSection = "UploadSetting"; // 공통 섹션
         private const string UploadKey_WaferFlat = "WaferFlat";     // Wafer-Flat 전용 Key
         private const string UploadKey_PreAlign = "PreAlign";      // Pre-Align 전용 Key
+        private const string UploadKey_Error = "Error";
         private const string KeyFolder = "WaferFlatFolder";  // 폴더 키
         private const string KeyPlugin = "FilePlugin";  // 플러그인 키
 
@@ -55,8 +57,10 @@ namespace ITM_Agent.ucPanel
 
             btn_FlatSet.Click += btn_FlatSet_Click;
             btn_FlatClear.Click += btn_FlatClear_Click;
-            btn_PreAlignSet.Click += btn_PreAlignSet_Click;   // ★ 추가
-            btn_PreAlignClear.Click += btn_PreAlignClear_Click; // ★ 추가
+            btn_PreAlignSet.Click += btn_PreAlignSet_Click;
+            btn_PreAlignClear.Click += btn_PreAlignClear_Click;
+            btn_ErrSet.Click += btn_ErrSet_Click;
+            btn_ErrClear.Click += btn_ErrClear_Click;
 
             /* ▣ 폼 Load 시 기존 항목 중복 제거 */
             this.Load += UcUploadPanel_Load;
@@ -64,19 +68,21 @@ namespace ITM_Agent.ucPanel
             // [추가] 프로그램 시작 시 콤보박스 중복 제거
             DeduplicateComboItems(cb_WaferFlat_Path);
             DeduplicateComboItems(cb_PreAlign_Path);
+            DeduplicateComboItems(cb_ErrPath);
 
             // ④ UI 로드
             LoadTargetFolderItems();
             LoadPluginItems();
 
+            // ⑤ 플러그인 초기 캐시
             prevPluginNames = new HashSet<string>(
                 pluginPanel.GetLoadedPlugins().Select(p => p.PluginName),
-                StringComparer.OrdinalIgnoreCase);                  // [추가]
+                StringComparer.OrdinalIgnoreCase);
 
-            // ⑤ INI 복원
+            // ⑥ INI 복원
             LoadUploadSettings();
 
-            // ⑥ 업로드 큐 소비 백그라운드
+            // ⑦ 업로드 큐 소비 백그라운드 유지
             Task.Run(() => ConsumeUploadQueueAsync(ctsUpload.Token));
         }
 
@@ -92,6 +98,11 @@ namespace ITM_Agent.ucPanel
             string preLine = settingsManager.GetValueFromSection(UploadSection, UploadKey_PreAlign);
             if (!string.IsNullOrWhiteSpace(preLine))
                 RestoreUploadSetting("PreAlign", preLine);
+
+            // 3) Error  [추가]
+            string errLine = settingsManager.GetValueFromSection(UploadSection, UploadKey_Error);
+            if (!string.IsNullOrWhiteSpace(errLine))
+                RestoreUploadSetting("Error", errLine);
         }
 
         /* --- 헬퍼 : 공통 파서 ---------------------------------------------- */
@@ -115,27 +126,33 @@ namespace ITM_Agent.ucPanel
 
             if (itemName == "WaferFlat")
             {
-                if (!cb_WaferFlat_Path.Items.Contains(folderPath))
-                    cb_WaferFlat_Path.Items.Add(folderPath);
+                if (!cb_WaferFlat_Path.Items.Contains(folderPath)) cb_WaferFlat_Path.Items.Add(folderPath);
                 cb_WaferFlat_Path.Text = folderPath;
 
-                if (!cb_FlatPlugin.Items.Contains(pluginName))
-                    cb_FlatPlugin.Items.Add(pluginName);
+                if (!cb_FlatPlugin.Items.Contains(pluginName)) cb_FlatPlugin.Items.Add(pluginName);
                 cb_FlatPlugin.Text = pluginName;
 
                 StartUploadFolderWatcher(folderPath);
             }
-            else  // PreAlign
+            else if (itemName == "PreAlign")
             {
-                if (!cb_PreAlign_Path.Items.Contains(folderPath))
-                    cb_PreAlign_Path.Items.Add(folderPath);
+                if (!cb_PreAlign_Path.Items.Contains(folderPath)) cb_PreAlign_Path.Items.Add(folderPath);
                 cb_PreAlign_Path.Text = folderPath;
-
-                if (!cb_PreAlignPlugin.Items.Contains(pluginName))
-                    cb_PreAlignPlugin.Items.Add(pluginName);
+        
+                if (!cb_PreAlignPlugin.Items.Contains(pluginName)) cb_PreAlignPlugin.Items.Add(pluginName);
                 cb_PreAlignPlugin.Text = pluginName;
-
+        
                 StartPreAlignFolderWatcher(folderPath);
+            }
+            else if (itemName == "Error")    // [추가]
+            {
+                if (!cb_ErrPath.Items.Contains(folderPath)) cb_ErrPath.Items.Add(folderPath);
+                cb_ErrPath.Text = folderPath;
+        
+                if (!cb_ErrPlugin.Items.Contains(pluginName)) cb_ErrPlugin.Items.Add(pluginName);
+                cb_ErrPlugin.Text = pluginName;
+        
+                StartErrFolderWatcher(folderPath);   // [추가]
             }
         }
 
@@ -143,7 +160,8 @@ namespace ITM_Agent.ucPanel
         private void LoadTargetFolderItems()
         {
             cb_WaferFlat_Path.Items.Clear();
-            cb_PreAlign_Path.Items.Clear();                // ★ Pre-Align 추가
+            cb_PreAlign_Path.Items.Clear();
+            cb_ErrPath.Items.Clear();
 
             IEnumerable<string> folders;
             if (configPanel != null)
@@ -151,22 +169,26 @@ namespace ITM_Agent.ucPanel
             else
                 folders = settingsManager.GetFoldersFromSection("[TargetFolders]");
 
-            cb_WaferFlat_Path.Items.AddRange(folders.ToArray());
-            cb_PreAlign_Path.Items.AddRange(folders.ToArray()); // 두 콤보 모두 동일 목록
+            var arr = folders.ToArray();
+            cb_WaferFlat_Path.Items.AddRange(arr);
+            cb_PreAlign_Path.Items.AddRange(arr);
+            cb_ErrPath.Items.AddRange(arr);
         }
 
         // ucPluginPanel에서 로드한 플러그인(PluginListItem) 목록을 콤보박스에 로드
         private void LoadPluginItems()
         {
             cb_FlatPlugin.Items.Clear();
-            cb_PreAlignPlugin.Items.Clear();               // ★ Pre-Align 추가
+            cb_PreAlignPlugin.Items.Clear();
+            cb_ErrPlugin.Items.Clear();
 
             if (pluginPanel == null) return;
 
             foreach (var p in pluginPanel.GetLoadedPlugins())
             {
                 cb_FlatPlugin.Items.Add(p.PluginName);
-                cb_PreAlignPlugin.Items.Add(p.PluginName); // 두 콤보 모두 동일 목록
+                cb_PreAlignPlugin.Items.Add(p.PluginName);
+                cb_ErrPlugin.Items.Add(p.PluginName);
             }
         }
 
@@ -495,7 +517,7 @@ namespace ITM_Agent.ucPanel
                 RemovePluginReferences(removed);
 
             // 2) 콤보(Flat·PreAlign) 갱신
-            ComboBox[] targets = { cb_FlatPlugin, cb_PreAlignPlugin };
+            ComboBox[] targets = { cb_FlatPlugin, cb_PreAlignPlugin, cb_ErrPlugin };
             foreach (var cb in targets)
             {
                 string prev = cb.Text;
@@ -512,51 +534,44 @@ namespace ITM_Agent.ucPanel
 
         private void RemovePluginReferences(string pluginName)
         {
-            /* 0) 현재 선택 여부를 먼저 파악해 예외를 예방한다. */               // [추가]
-            bool isFlatSelected = string.Equals(cb_FlatPlugin.Text,
-                                                    pluginName,
-                                                    StringComparison.OrdinalIgnoreCase); // [추가]
-            bool isPreSelected = string.Equals(cb_PreAlignPlugin.Text,
-                                                    pluginName,
-                                                    StringComparison.OrdinalIgnoreCase); // [추가]
-
-            /* ── 1) Wafer-Flat ───────────────────────────────────────── */
+            // 0) 현재 선택 여부 파악
+            bool isFlatSelected = string.Equals(cb_FlatPlugin.Text,     pluginName, StringComparison.OrdinalIgnoreCase);
+            bool isPreSelected  = string.Equals(cb_PreAlignPlugin.Text, pluginName, StringComparison.OrdinalIgnoreCase);
+            bool isErrSelected  = string.Equals(cb_ErrPlugin.Text,      pluginName, StringComparison.OrdinalIgnoreCase); // [추가]
+            // ── 1) Wafer-Flat
             if (cb_FlatPlugin.Items.Contains(pluginName))
-                cb_FlatPlugin.Items.Remove(pluginName);                              // [수정]
-
-            if (isFlatSelected)                                                      // [수정]
+                cb_FlatPlugin.Items.Remove(pluginName);
+            if (isFlatSelected)
             {
-                /* ① UI 초기화 */
-                cb_FlatPlugin.SelectedIndex = -1;                                   // [추가]
-                cb_FlatPlugin.Text = string.Empty;                         // [추가]
-                cb_WaferFlat_Path.SelectedIndex = -1;                                // [추가]
-                cb_WaferFlat_Path.Text = string.Empty;                         // [추가]
-
-                /* ② 폴더 감시 중단 */
-                uploadFolderWatcher?.Dispose();                                      // [수정]
-                uploadFolderWatcher = null;                                          // [수정]
-
-                /* ③ INI Key 삭제 */
-                settingsManager.RemoveKeyFromSection(UploadSection, UploadKey_WaferFlat); // [수정]
-                logManager.LogEvent("[ucUploadPanel] Wafer-Flat 설정 초기화(플러그인 삭제)"); // [추가]
+                cb_FlatPlugin.SelectedIndex = -1; cb_FlatPlugin.Text = string.Empty;
+                cb_WaferFlat_Path.SelectedIndex = -1; cb_WaferFlat_Path.Text = string.Empty;
+                uploadFolderWatcher?.Dispose(); uploadFolderWatcher = null;
+                settingsManager.RemoveKeyFromSection(UploadSection, UploadKey_WaferFlat);
+                logManager.LogEvent("[ucUploadPanel] Wafer-Flat 설정 초기화(플러그인 삭제)");
             }
-
-            /* ── 2) Pre-Align ───────────────────────────────────────── */
+        
+            // ── 2) Pre-Align  (기존 로직) :contentReference[oaicite:26]{index=26}
             if (cb_PreAlignPlugin.Items.Contains(pluginName))
-                cb_PreAlignPlugin.Items.Remove(pluginName);                          // [수정]
-
-            if (isPreSelected)                                                       // [수정]
+                cb_PreAlignPlugin.Items.Remove(pluginName);
+            if (isPreSelected)
             {
-                cb_PreAlignPlugin.SelectedIndex = -1;                                // [추가]
-                cb_PreAlignPlugin.Text = string.Empty;                      // [추가]
-                cb_PreAlign_Path.SelectedIndex = -1;                                // [추가]
-                cb_PreAlign_Path.Text = string.Empty;                      // [추가]
-
-                preAlignFolderWatcher?.Dispose();                                    // [수정]
-                preAlignFolderWatcher = null;                                        // [추가]
-
-                settingsManager.RemoveKeyFromSection(UploadSection, UploadKey_PreAlign); // [수정]
-                logManager.LogEvent("[ucUploadPanel] Pre-Align 설정 초기화(플러그인 삭제)"); // [추가]
+                cb_PreAlignPlugin.SelectedIndex = -1; cb_PreAlignPlugin.Text = string.Empty;
+                cb_PreAlign_Path.SelectedIndex = -1; cb_PreAlign_Path.Text = string.Empty;
+                preAlignFolderWatcher?.Dispose(); preAlignFolderWatcher = null;
+                settingsManager.RemoveKeyFromSection(UploadSection, UploadKey_PreAlign);
+                logManager.LogEvent("[ucUploadPanel] Pre-Align 설정 초기화(플러그인 삭제)");
+            }
+        
+            // ── 3) Error  [추가]
+            if (cb_ErrPlugin.Items.Contains(pluginName))
+                cb_ErrPlugin.Items.Remove(pluginName);
+            if (isErrSelected)
+            {
+                cb_ErrPlugin.SelectedIndex = -1; cb_ErrPlugin.Text = string.Empty;
+                cb_ErrPath.SelectedIndex = -1;   cb_ErrPath.Text = string.Empty;
+                errFolderWatcher?.Dispose();     errFolderWatcher = null;
+                settingsManager.RemoveKeyFromSection(UploadSection, UploadKey_Error);
+                logManager.LogEvent("[ucUploadPanel] Error 설정 초기화(플러그인 삭제)");
             }
         }
 
@@ -868,6 +883,123 @@ namespace ITM_Agent.ucPanel
             {
                 logManager.LogError($"[UploadPanel] ({pluginName}) 처리 실패: {ex.Message}");
             }
+        }
+        
+        // === Error : Set ===
+        private void btn_ErrSet_Click(object sender, EventArgs e)
+        {
+            string rawFolder = cb_ErrPath.Text.Trim();          // [추가]
+            string rawPlugin = cb_ErrPlugin.Text.Trim();        // [추가]
+        
+            if (string.IsNullOrEmpty(rawFolder) || string.IsNullOrEmpty(rawPlugin))
+            {
+                MessageBox.Show("Error 폴더와 플러그인을 모두 선택(입력)하세요.", "알림",
+                                MessageBoxButtons.OK, MessageBoxIcon.Information);
+                return;
+            }
+        
+            if (!Directory.Exists(rawFolder))
+            {
+                MessageBox.Show("존재하지 않는 폴더입니다.", "오류",
+                                MessageBoxButtons.OK, MessageBoxIcon.Error);
+                return;
+            }
+        
+            string normalizedFolder = NormalizePath(rawFolder); // (Pre-Align과 동일 포맷) :contentReference[oaicite:20]{index=20}
+            string pluginName = rawPlugin;
+        
+            string iniValue = $"Folder : {normalizedFolder}, Plugin : {pluginName}";
+            settingsManager.SetValueToSection(UploadSection, UploadKey_Error, iniValue); // [추가]
+        
+            AddPathToCombo(cb_ErrPath, rawFolder);              // [추가]
+            AddPathToCombo(cb_ErrPlugin, pluginName);           // [추가]
+            DeduplicateComboItems(cb_ErrPath);                  // [추가]
+        
+            logManager.LogEvent($"[ucUploadPanel] 저장(Error) ➜ {iniValue}");
+            MessageBox.Show("Error 설정이 저장되었습니다.", "완료",
+                            MessageBoxButtons.OK, MessageBoxIcon.Information);
+        
+            StartErrFolderWatcher(normalizedFolder);            // [추가]
+        }
+        
+        // === Error : Clear ===
+        private void btn_ErrClear_Click(object sender, EventArgs e)
+        {
+            cb_ErrPath.SelectedIndex = -1;       // [추가]
+            cb_ErrPath.Text = string.Empty;      // [추가]
+            cb_ErrPlugin.SelectedIndex = -1;     // [추가]
+            cb_ErrPlugin.Text = string.Empty;    // [추가]
+        
+            errFolderWatcher?.Dispose();         // [추가]
+            errFolderWatcher = null;             // [추가]
+        
+            settingsManager.RemoveKeyFromSection(UploadSection, UploadKey_Error); // [추가]
+            logManager.LogEvent("[ucUploadPanel] Error 설정 초기화");
+        
+            MessageBox.Show("Error 업로드 설정이 초기화되었습니다.",
+                            "초기화 완료", MessageBoxButtons.OK, MessageBoxIcon.Information);
+        }
+        
+        private void StartErrFolderWatcher(string folderPath)
+        {
+            try
+            {
+                folderPath = folderPath.Trim();
+                if (string.IsNullOrEmpty(folderPath))
+                    throw new ArgumentException("폴더 경로가 비어 있습니다.", nameof(folderPath));
+        
+                if (!Directory.Exists(folderPath))
+                    Directory.CreateDirectory(folderPath);
+        
+                errFolderWatcher?.Dispose(); // [추가] 기존 감시 해제
+        
+                errFolderWatcher = new FileSystemWatcher(folderPath)
+                {
+                    Filter = "*.*",
+                    IncludeSubdirectories = false,
+                    NotifyFilter = NotifyFilters.FileName | NotifyFilters.Size | NotifyFilters.LastWrite,
+                    EnableRaisingEvents = true
+                };
+        
+                // Pre-Align과 동일하게 Created + Changed 감시  :contentReference[oaicite:21]{index=21}
+                errFolderWatcher.Created += ErrFolderWatcher_Event;  // [추가]
+                errFolderWatcher.Changed += ErrFolderWatcher_Event;  // [추가]
+        
+                logManager.LogEvent($"[UploadPanel] Error 폴더 감시 시작: {folderPath}");
+            }
+            catch (Exception ex)
+            {
+                logManager.LogError($"[UploadPanel] Error 폴더 감시 시작 실패: {ex.Message}");
+                MessageBox.Show("Error 폴더 감시를 시작할 수 없습니다.\n" + ex.Message,
+                                "오류", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            }
+        }
+        
+        private void ErrFolderWatcher_Event(object sender, FileSystemEventArgs e)
+        {
+            Thread.Sleep(200);                                   // (Pre-Align 동일 대기) :contentReference[oaicite:22]{index=22}
+            uploadQueue.Enqueue(e.FullPath);
+            logManager.LogEvent($"[UploadPanel] (Error) 대기 큐 추가 : {e.FullPath}");
+        
+            // OverrideNamesPanel 선처리(.info 대기/리네임) → 플러그인 입력 경로 안정화
+            string readyPath = overridePanel?.EnsureOverrideAndReturnPath(e.FullPath, 10_000)
+                               ?? e.FullPath;                    // (Pre-Align과 동일) :contentReference[oaicite:23]{index=23}
+        
+            // UI 스레드에서 플러그인명 안전 취득
+            string pluginName = string.Empty;
+            if (InvokeRequired)
+                Invoke(new MethodInvoker(() => pluginName = cb_ErrPlugin.Text.Trim())); // [추가]
+            else
+                pluginName = cb_ErrPlugin.Text.Trim();
+        
+            if (string.IsNullOrEmpty(pluginName))
+            {
+                logManager.LogError("[UploadPanel] (Error) 플러그인 미선택");
+                return;
+            }
+        
+            // Wafer-Flat/Pre-Align과 동일한 공통 호출 경로 사용  :contentReference[oaicite:24]{index=24}
+            Task.Run(() => ProcessFileWithPlugin(readyPath, pluginName));
         }
     }
 }
