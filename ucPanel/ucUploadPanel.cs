@@ -567,12 +567,12 @@ namespace ITM_Agent.ucPanel
 
             // ── 3) Error  [추가]
             if (cb_ErrPlugin.Items.Contains(pluginName))
-                cb_ErrPlugin.Items.Remove(pluginName);
+                cb_ErrPlugin.Items.Remove(pluginName);a
             if (isErrSelected)
             {
                 cb_ErrPlugin.SelectedIndex = -1; cb_ErrPlugin.Text = string.Empty;
-                cb_ErrPath.SelectedIndex = -1;   cb_ErrPath.Text = string.Empty;
-                errFolderWatcher?.Dispose();     errFolderWatcher = null;
+                cb_ErrPath.SelectedIndex = -1; cb_ErrPath.Text = string.Empty;
+                errFolderWatcher?.Dispose(); errFolderWatcher = null;
                 settingsManager.RemoveKeyFromSection(UploadSection, UploadKey_Error);
                 logManager.LogEvent("[ucUploadPanel] Error 설정 초기화(플러그인 삭제)");
             }
