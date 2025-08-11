@@ -170,29 +170,30 @@ namespace ErrorDataLib
             var lines = raw.Split(new[] { "\r\n", "\n" }, StringSplitOptions.RemoveEmptyEntries); // [유지]
             var meta = ParseMeta(lines);                                                          // [유지]
             if (!meta.ContainsKey("EqpId")) meta["EqpId"] = eqpid;                                // [유지]
-        
+
             var infoTable = BuildInfoDataTable(meta);                                            // [유지]
             UploadItmInfoUpsert(infoTable);                                                      // [추가] 장비당 1건 업서트
-        
+
             var errorTable = BuildErrorDataTable(lines, eqpid);                                   // [유지]
             if (errorTable.Rows.Count > 0)
                 UploadDataTable(errorTable, "plg_error");                                         // [수정] 테이블명: error → plg_error
-        
+
             SimpleLogger.Event("Done ▶ " + Path.GetFileName(filePath));                           // [유지]
         }
 
-        private void UploadItmInfoUpsert(DataTable dt) // [추가]
+        private void UploadItmInfoUpsert(DataTable dt)
         {
             if (dt == null || dt.Rows.Count == 0) return;
         
             var r = dt.Rows[0];
             string cs = DatabaseInfo.CreateDefault().GetConnectionString();
         
+            // [수정] customer 컬럼 제거, serv_ts 파라미터로 보정값(초단위) 전달
             const string SQL = @"
                 INSERT INTO public.itm_info
-                    (eqpid, system_name, system_model, serial_num, application, version, db_version, customer, ""date"")
+                    (eqpid, system_name, system_model, serial_num, application, version, db_version, ""date"", serv_ts)  -- [수정]
                 VALUES
-                    (@eqpid, @system_name, @system_model, @serial_num, @application, @version, @db_version, @customer, @date)
+                    (@eqpid, @system_name, @system_model, @serial_num, @application, @version, @db_version, @date, @serv_ts) -- [수정]
                 ON CONFLICT (eqpid) DO UPDATE
                 SET
                     system_name  = EXCLUDED.system_name,
@@ -201,9 +202,8 @@ namespace ErrorDataLib
                     application  = EXCLUDED.application,
                     version      = EXCLUDED.version,
                     db_version   = EXCLUDED.db_version,
-                    customer     = EXCLUDED.customer,
                     ""date""      = EXCLUDED.""date"",
-                    serv_ts      = NOW()
+                    serv_ts      = EXCLUDED.serv_ts  -- [수정] NOW() 제거, 보정값 사용
                 WHERE
                     (itm_info.system_name  IS DISTINCT FROM EXCLUDED.system_name)  OR
                     (itm_info.system_model IS DISTINCT FROM EXCLUDED.system_model) OR
@@ -211,9 +211,24 @@ namespace ErrorDataLib
                     (itm_info.application  IS DISTINCT FROM EXCLUDED.application)  OR
                     (itm_info.version      IS DISTINCT FROM EXCLUDED.version)      OR
                     (itm_info.db_version   IS DISTINCT FROM EXCLUDED.db_version)   OR
-                    (itm_info.customer     IS DISTINCT FROM EXCLUDED.customer)     OR
                     (itm_info.""date""      IS DISTINCT FROM EXCLUDED.""date"");
                 ";
+        
+            // [추가] 보정 기준 시각: date 파싱 성공 시 그 값을, 실패 시 현재 시각
+            DateTime srcDate = DateTime.Now;                                  // [추가]
+            var dv = r["date"];                                               // [추가]
+            if (dv != null && dv != DBNull.Value)                             // [추가]
+            {
+                DateTime dtParsed;                                            // [추가]
+                if (DateTime.TryParseExact(dv.ToString(), "yyyy-MM-dd HH:mm:ss",
+                    CultureInfo.InvariantCulture, DateTimeStyles.None, out dtParsed))
+                    srcDate = dtParsed;                                       // [추가]
+            }
+            var srv = ITM_Agent.Services.TimeSyncProvider                     // [추가]
+                          .Instance.ToSynchronizedKst(srcDate);
+            // 밀리초 절삭(초단위 저장)
+            srv = new DateTime(srv.Year, srv.Month, srv.Day,                  // [추가]
+                               srv.Hour, srv.Minute, srv.Second);
         
             using (var conn = new NpgsqlConnection(cs))
             {
@@ -227,21 +242,19 @@ namespace ErrorDataLib
                     cmd.Parameters.AddWithValue("@application", r["application"]  ?? (object)DBNull.Value);
                     cmd.Parameters.AddWithValue("@version",     r["version"]      ?? (object)DBNull.Value);
                     cmd.Parameters.AddWithValue("@db_version",  r["db_version"]   ?? (object)DBNull.Value);
-                    cmd.Parameters.AddWithValue("@customer",    r["customer"]     ?? (object)DBNull.Value);
         
                     object dateParam = DBNull.Value;
-                    var dv = r["date"];
                     if (dv != null && dv != DBNull.Value)
                     {
                         DateTime dtParsed;
                         if (DateTime.TryParseExact(dv.ToString(), "yyyy-MM-dd HH:mm:ss",
-                            System.Globalization.CultureInfo.InvariantCulture,
-                            System.Globalization.DateTimeStyles.None, out dtParsed))
+                            CultureInfo.InvariantCulture, DateTimeStyles.None, out dtParsed))
                             dateParam = dtParsed;
                         else
                             dateParam = dv.ToString();
                     }
-                    cmd.Parameters.AddWithValue("@date", dateParam);
+                    cmd.Parameters.AddWithValue("@date",     dateParam);       // [수정]
+                    cmd.Parameters.AddWithValue("@serv_ts",  srv);             // [추가]
         
                     cmd.ExecuteNonQuery();
                 }
@@ -288,27 +301,23 @@ namespace ErrorDataLib
         {
             var map = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
             {
-                { "DATE",        "date"        },   // [추가]
-                { "SYSTEM_NAME", "system_name" },
-                { "SYSTEM_MODEL","system_model"},
-                { "SERIAL_NUM",  "serial_num"  },
-                { "APPLICATION", "application" },
-                { "VERSION",     "version"     },
-                { "DB_VERSION",  "db_version"  },
-                { "CUSTOMER",    "customer"    },
-                { "EqpId",       "eqpid"       }
+                ["DATE"] = "date",
+                ["SYSTEM_NAME"] = "system_name",
+                ["SYSTEM_MODEL"] = "system_model",
+                ["SERIAL_NUM"] = "serial_num",
+                ["APPLICATION"] = "application",
+                ["VERSION"] = "version",
+                ["DB_VERSION"] = "db_version",
+                // ["CUSTOMER"] = "customer",                    // [삭제] 고객 컬럼 적재 제외
+                ["EqpId"] = "eqpid"
             };
-
+        
             var dt = new DataTable();
-            foreach (var col in map.Values) dt.Columns.Add(col, typeof(string));
-
-            var row = dt.NewRow();
+            foreach (var c in map.Values) dt.Columns.Add(c, typeof(string));
+            var dr = dt.NewRow();
             foreach (var kv in map)
-            {
-                string v;
-                row[kv.Value] = meta.TryGetValue(kv.Key, out v) ? (object)v : DBNull.Value;
-            }
-            dt.Rows.Add(row);
+                dr[kv.Value] = meta.TryGetValue(kv.Key, out string v) ? (object)v : DBNull.Value;
+            dt.Rows.Add(dr);
             return dt;
         }
 
@@ -316,42 +325,58 @@ namespace ErrorDataLib
         private DataTable BuildErrorDataTable(string[] lines, string eqpid)
         {
             var dt = new DataTable();
-            dt.Columns.Add("eqpid", typeof(string));              // [추가]
-            dt.Columns.Add("error_id", typeof(string));
-            dt.Columns.Add("time_stamp", typeof(DateTime));
-            dt.Columns.Add("error_label", typeof(string));
-            dt.Columns.Add("error_desc", typeof(string));
-            dt.Columns.Add("millisecond", typeof(int));
-            dt.Columns.Add("extra_message_1", typeof(string));
-            dt.Columns.Add("extra_message_2", typeof(string));
-
-            // 예: ERR001, 24-Jul-25 01:23:45 PM, Label, Desc, 123, (Optional Extra ...)
-            var rg = new Regex(@"^(?<id>\w+),\s*(?<ts>[^,]+),\s*(?<lbl>[^,]+),\s*(?<desc>[^,]+),\s*(?<ms>\d+)(?:,\s*(?<extra>.*))?", RegexOptions.Compiled);
-
-            for (int i = 0; i < lines.Length; i++)
+            dt.Columns.AddRange(new[]
             {
-                var m = rg.Match(lines[i]);
+                new DataColumn("eqpid", typeof(string)),
+                new DataColumn("error_id", typeof(string)),
+                new DataColumn("time_stamp", typeof(DateTime)),
+                new DataColumn("error_label", typeof(string)),
+                new DataColumn("error_desc", typeof(string)),
+                new DataColumn("millisecond", typeof(int)),
+                new DataColumn("extra_message_1", typeof(string)),
+                new DataColumn("extra_message_2", typeof(string)),
+                new DataColumn("serv_ts", typeof(DateTime))                 // [추가] 보정된 서버시각(초단위)
+            });
+        
+            var rg = new Regex(
+                @"^(?<id>\w+),\s*(?<ts>[^,]+),\s*(?<lbl>[^,]+),\s*(?<desc>[^,]+),\s*(?<ms>\d+)(?:,\s*(?<extra>.*))?",
+                RegexOptions.Compiled);
+        
+            foreach (var ln in lines)
+            {
+                var m = rg.Match(ln);
                 if (!m.Success) continue;
-
-                var r = dt.NewRow();
-                r["eqpid"] = eqpid;
-                r["error_id"] = m.Groups["id"].Value.Trim();
-
-                DateTime ts;
-                if (DateTime.TryParseExact(m.Groups["ts"].Value.Trim(), "dd-MMM-yy h:mm:ss tt", CultureInfo.InvariantCulture, DateTimeStyles.None, out ts))
-                    r["time_stamp"] = ts;
-
-                r["error_label"] = m.Groups["lbl"].Value.Trim();
-                r["error_desc"] = m.Groups["desc"].Value.Trim();
-
+        
+                DateTime parsedTs;
+                bool okTs = DateTime.TryParseExact(
+                    m.Groups["ts"].Value.Trim(),
+                    "dd-MMM-yy h:mm:ss tt",
+                    CultureInfo.InvariantCulture,
+                    DateTimeStyles.None,
+                    out parsedTs);
+        
+                var dr = dt.NewRow();
+                dr["eqpid"] = eqpid;
+                dr["error_id"] = m.Groups["id"].Value.Trim();
+                if (okTs) dr["time_stamp"] = parsedTs;                      // [유지]
+                dr["error_label"] = m.Groups["lbl"].Value.Trim();
+                dr["error_desc"]  = m.Groups["desc"].Value.Trim();
+        
                 int ms;
-                if (int.TryParse(m.Groups["ms"].Value, NumberStyles.Integer, CultureInfo.InvariantCulture, out ms))
-                    r["millisecond"] = ms;
-
-                r["extra_message_1"] = m.Groups["extra"].Value.Trim();
-                r["extra_message_2"] = ""; // 사용 안 함
-
-                dt.Rows.Add(r);
+                if (int.TryParse(m.Groups["ms"].Value, out ms)) dr["millisecond"] = ms;
+        
+                dr["extra_message_1"] = m.Groups["extra"].Value.Trim();
+                dr["extra_message_2"] = "";
+        
+                // [추가] serv_ts = 보정 + 밀리초 절삭
+                var basis = okTs ? parsedTs : DateTime.Now;                 // [추가]
+                var srv   = ITM_Agent.Services.TimeSyncProvider
+                                .Instance.ToSynchronizedKst(basis);         // [추가]
+                srv = new DateTime(srv.Year, srv.Month, srv.Day,            // [추가]
+                                   srv.Hour, srv.Minute, srv.Second);
+                dr["serv_ts"] = srv;                                        // [추가]
+        
+                dt.Rows.Add(dr);
             }
             return dt;
         }
@@ -366,17 +391,17 @@ namespace ErrorDataLib
 
             string cs = DatabaseInfo.CreateDefault().GetConnectionString();
             const string SQL = @"
-SELECT 1 
-FROM public.itm_info 
-WHERE system_name = @sn 
-  AND system_model = @sm 
-  AND serial_num   = @snm 
-  AND application  = @app 
-  AND version      = @ver 
-  AND db_version   = @dbv 
-  AND customer     = @cust 
-  AND eqpid        = @eqp
-LIMIT 1;";
+                SELECT 1 
+                FROM public.itm_info 
+                WHERE system_name = @sn 
+                  AND system_model = @sm 
+                  AND serial_num   = @snm 
+                  AND application  = @app 
+                  AND version      = @ver 
+                  AND db_version   = @dbv 
+                  AND customer     = @cust 
+                  AND eqpid        = @eqp
+                LIMIT 1;";
 
             using (var conn = new NpgsqlConnection(cs))
             {
