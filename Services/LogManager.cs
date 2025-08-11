@@ -3,6 +3,8 @@ using System;
 using System.IO;
 using System.Text;
 using System.Threading;
+using System.Reflection;
+using System.Linq;
 
 namespace ITM_Agent.Services
 {
@@ -175,6 +177,46 @@ namespace ITM_Agent.Services
             // (5) 이후 WriteLogWithRotation() 가 호출되면서
             //     같은 이름의 새로운 원본 로그(0번) 파일이 자동 생성되어
             //     이어서 로그가 기록됨.
+        }
+
+        public static void BroadcastPluginDebug(bool enabled)
+        {
+            try
+            {
+                var asms = AppDomain.CurrentDomain.GetAssemblies();
+                foreach (var asm in asms)
+                {
+                    Type[] types;
+                    try
+                    {
+                        types = asm.GetTypes();
+                    }
+                    catch (ReflectionTypeLoadException ex)
+                    {
+                        types = ex.Types.Where(t => t != null).ToArray();
+                    }
+                    if (types == null) continue;
+
+                    foreach (var t in types)
+                    {
+                        if (!t.IsClass) continue;
+                        if (!string.Equals(t.Name, "SimpleLogger", StringComparison.Ordinal)) continue;
+
+                        // 우선순위: SetDebugMode(bool) → SetDebug(bool)
+                        var m = t.GetMethod("SetDebugMode", BindingFlags.Public | BindingFlags.Static);
+                        if (m == null) m = t.GetMethod("SetDebug", BindingFlags.Public | BindingFlags.Static);
+                        if (m == null) continue;
+
+                        var ps = m.GetParameters();
+                        if (ps.Length == 1 && ps[0].ParameterType == typeof(bool))
+                        {
+                            try { m.Invoke(null, new object[] { enabled }); }
+                            catch { /* 플러그인 내부 예외는 무시(다른 플러그인 영향 방지) */ }
+                        }
+                    }
+                }
+            }
+            catch { /* 전체 브로드캐스트 실패는 무시(기본 로깅 동작엔 영향 없음) */ }
         }
     }
 }
