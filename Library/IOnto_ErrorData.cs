@@ -10,16 +10,18 @@ using System.Text.RegularExpressions;
 using System.Threading;
 using Npgsql;
 using ConnectInfo;
-using ITM_Agent.Services;
 
 namespace ErrorDataLib
 {
     /*──────────────────────── Logger ───────────────────────*/
     internal static class SimpleLogger
     {
+        private static volatile bool _debugEnabled = false;
+        public static void SetDebug(bool enabled) { _debugEnabled = enabled; }
+
         private static readonly object _sync = new object();
-        private static readonly string _dir = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Logs");
-        private static string PathOf(string sfx) { return Path.Combine(_dir, string.Format("{0:yyyyMMdd}_{1}.log", DateTime.Now, sfx)); }
+        private static readonly string _dir = System.IO.Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Logs");
+        private static string PathOf(string sfx) => System.IO.Path.Combine(_dir, $"{DateTime.Now:yyyyMMdd}_{sfx}.log");
 
         private static void Write(string s, string m)
         {
@@ -27,17 +29,20 @@ namespace ErrorDataLib
             {
                 lock (_sync)
                 {
-                    Directory.CreateDirectory(_dir);
-                    var line = string.Format("{0:yyyy-MM-dd HH:mm:ss.fff} [ErrorData] {1}{2}", DateTime.Now, m, Environment.NewLine);
-                    File.AppendAllText(PathOf(s), line, Encoding.UTF8);
+                    System.IO.Directory.CreateDirectory(_dir);
+                    var line = $"{DateTime.Now:yyyy-MM-dd HH:mm:ss.fff} [ErrorData] {m}{Environment.NewLine}";
+                    System.IO.File.AppendAllText(PathOf(s), line, System.Text.Encoding.UTF8);
                 }
             }
-            catch { /* 로깅 실패는 무시 */ }
+            catch { /* 로깅 실패 무시 */ }
         }
 
         public static void Event(string m) { Write("event", m); }
         public static void Error(string m) { Write("error", m); }
-        public static void Debug(string m) { Write("debug", m); }
+        public static void Debug(string m)
+        {
+            if (_debugEnabled) Write("debug", m);
+        }
     }
 
     /*──────────────────────── Interface ─────────────────────*/
@@ -270,46 +275,34 @@ namespace ErrorDataLib
             var r = dt.Rows[0];
             string cs = DatabaseInfo.CreateDefault().GetConnectionString();
 
-            const string SQL = @"
-                INSERT INTO public.itm_info
-                    (eqpid, system_name, system_model, serial_num, application, version, db_version, ""date"", serv_ts)  -- [수정]
-                VALUES
-                    (@eqpid, @system_name, @system_model, @serial_num, @application, @version, @db_version, @date, @serv_ts) -- [수정]
-                ON CONFLICT (eqpid) DO UPDATE
-                SET
-                    system_name  = EXCLUDED.system_name,
-                    system_model = EXCLUDED.system_model,
-                    serial_num   = EXCLUDED.serial_num,
-                    application  = EXCLUDED.application,
-                    version      = EXCLUDED.version,
-                    db_version   = EXCLUDED.db_version,
-                    ""date""      = EXCLUDED.""date"",
-                    serv_ts      = EXCLUDED.serv_ts  -- [수정] NOW() 제거, 보정값 사용
-                WHERE
-                    (itm_info.system_name  IS DISTINCT FROM EXCLUDED.system_name)  OR
-                    (itm_info.system_model IS DISTINCT FROM EXCLUDED.system_model) OR
-                    (itm_info.serial_num   IS DISTINCT FROM EXCLUDED.serial_num)   OR
-                    (itm_info.application  IS DISTINCT FROM EXCLUDED.application)  OR
-                    (itm_info.version      IS DISTINCT FROM EXCLUDED.version)      OR
-                    (itm_info.db_version   IS DISTINCT FROM EXCLUDED.db_version)   OR
-                    (itm_info.""date""      IS DISTINCT FROM EXCLUDED.""date"");
-                ";
-
-            // [추가] 보정 기준 시각: date 파싱 성공 시 그 값을, 실패 시 현재 시각
-            DateTime srcDate = DateTime.Now;                                  // [추가]
-            var dv = r["date"];                                               // [추가]
-            if (dv != null && dv != DBNull.Value)                             // [추가]
+            // [추가] 변경 여부 선판단: 동일 eqpid에 동일 속성 조합이 이미 존재하면 스킵
+            if (!IsInfoChanged(dt))
             {
-                DateTime dtParsed;                                            // [추가]
+                SimpleLogger.Event("itm_info unchanged ▶ eqpid=" + (r["eqpid"] ?? ""));
+                return;
+            }
+
+            // [유지/수정] serv_ts 보정(밀리초 제거)
+            DateTime srcDate = DateTime.Now;
+            var dv = r["date"];
+            if (dv != null && dv != DBNull.Value)
+            {
+                DateTime dtParsed;
                 if (DateTime.TryParseExact(dv.ToString(), "yyyy-MM-dd HH:mm:ss",
                     CultureInfo.InvariantCulture, DateTimeStyles.None, out dtParsed))
-                    srcDate = dtParsed;                                       // [추가]
+                    srcDate = dtParsed;
             }
-            var srv = ITM_Agent.Services.TimeSyncProvider                     // [추가]
+            var srv = ITM_Agent.Services.TimeSyncProvider
                           .Instance.ToSynchronizedKst(srcDate);
-            // 밀리초 절삭(초단위 저장)
-            srv = new DateTime(srv.Year, srv.Month, srv.Day,                  // [추가]
-                               srv.Hour, srv.Minute, srv.Second);
+            srv = new DateTime(srv.Year, srv.Month, srv.Day, srv.Hour, srv.Minute, srv.Second);
+
+            // [수정] 단순 INSERT — 충돌 대상(UNIQUE/PK on eqpid)이 없어야 함
+            const string SQL = @"
+                INSERT INTO public.itm_info
+                    (eqpid, system_name, system_model, serial_num, application, version, db_version, ""date"", serv_ts)
+                VALUES
+                    (@eqpid, @system_name, @system_model, @serial_num, @application, @version, @db_version, @date, @serv_ts);
+            ";
 
             using (var conn = new NpgsqlConnection(cs))
             {
@@ -340,7 +333,7 @@ namespace ErrorDataLib
                     cmd.ExecuteNonQuery();
                 }
             }
-            SimpleLogger.Event("itm_info upsert OK ▶ eqpid=" + r["eqpid"]);
+            SimpleLogger.Event("itm_info inserted ▶ eqpid=" + (r["eqpid"] ?? ""));
         }
 
         // 파일 상단의 "키:," 형태 메타데이터 파싱 + DATE 형식 변환
@@ -358,14 +351,14 @@ namespace ErrorDataLib
                 string val = ln.Substring(idx + 2).Trim();
                 if (key.Length == 0) continue;
 
-                // 'EXPORT_TYPE' 은 스킵 (요구사항)                                       // [추가]
+                // 'EXPORT_TYPE' 은 스킵 (요구사항)
                 if (string.Equals(key, "EXPORT_TYPE", StringComparison.OrdinalIgnoreCase))
                     continue;
 
                 d[key] = val;
             }
 
-            // DATE: M/d/yyyy H:m:s → yyyy-MM-dd HH:mm:ss                                 // [추가]
+            // DATE: M/d/yyyy H:m:s → yyyy-MM-dd HH:mm:ss
             string ds;
             if (d.TryGetValue("DATE", out ds))
             {
@@ -466,21 +459,20 @@ namespace ErrorDataLib
         // itm_info 변경 여부 판단 (DATE 제외)
         private bool IsInfoChanged(DataTable dt)
         {
-            if (dt == null || dt.Rows.Count == 0) return false;
+            if (dt == null || dt.Rows.Count == 0) return false;                                      
             var r = dt.Rows[0];
 
-            string cs = DatabaseInfo.CreateDefault().GetConnectionString();
+            string cs = DatabaseInfo.CreateDefault().GetConnectionString();                           
             const string SQL = @"
-                SELECT 1 
-                FROM public.itm_info 
-                WHERE system_name = @sn 
-                  AND system_model = @sm 
-                  AND serial_num   = @snm 
-                  AND application  = @app 
-                  AND version      = @ver 
-                  AND db_version   = @dbv 
-                  AND customer     = @cust 
-                  AND eqpid        = @eqp
+                SELECT 1
+                FROM public.itm_info
+                WHERE eqpid = @eqp
+                  AND system_name IS NOT DISTINCT FROM @sn
+                  AND system_model IS NOT DISTINCT FROM @sm
+                  AND serial_num IS NOT DISTINCT FROM @snm
+                  AND application IS NOT DISTINCT FROM @app
+                  AND version IS NOT DISTINCT FROM @ver
+                  AND db_version IS NOT DISTINCT FROM @dbv
                 LIMIT 1;";
 
             using (var conn = new NpgsqlConnection(cs))
@@ -488,18 +480,16 @@ namespace ErrorDataLib
                 conn.Open();
                 using (var cmd = new NpgsqlCommand(SQL, conn))
                 {
+                    cmd.Parameters.AddWithValue("@eqp", r["eqpid"] ?? (object)DBNull.Value);
                     cmd.Parameters.AddWithValue("@sn", r["system_name"] ?? (object)DBNull.Value);
                     cmd.Parameters.AddWithValue("@sm", r["system_model"] ?? (object)DBNull.Value);
                     cmd.Parameters.AddWithValue("@snm", r["serial_num"] ?? (object)DBNull.Value);
                     cmd.Parameters.AddWithValue("@app", r["application"] ?? (object)DBNull.Value);
                     cmd.Parameters.AddWithValue("@ver", r["version"] ?? (object)DBNull.Value);
                     cmd.Parameters.AddWithValue("@dbv", r["db_version"] ?? (object)DBNull.Value);
-                    cmd.Parameters.AddWithValue("@cust", r["customer"] ?? (object)DBNull.Value);
-                    cmd.Parameters.AddWithValue("@eqp", r["eqpid"] ?? (object)DBNull.Value);
 
                     object o = cmd.ExecuteScalar();
-                    // 기존 행이 없으면 "변경됨"으로 간주 → 업로드
-                    return o == null;
+                    return o == null; // 존재하지 않으면 "변경됨"으로 간주 → INSERT 수행
                 }
             }
         }
