@@ -167,29 +167,29 @@ namespace ErrorDataLib
         private void ProcessFile(string filePath, string eqpid)
         {
             // 파일 읽기 및 파싱 (기존 로직 유지)
-            string raw = File.ReadAllText(filePath, Encoding.GetEncoding(949));              
+            string raw = File.ReadAllText(filePath, Encoding.GetEncoding(949));
             var lines = raw.Split(new[] { "\r\n", "\n" }, StringSplitOptions.RemoveEmptyEntries);
             var meta = ParseMeta(lines);
             if (!meta.ContainsKey("EqpId")) meta["EqpId"] = eqpid;
-        
-            // itm_info 업서트 (기존 로직)                                                
-            var infoTable = BuildInfoDataTable(meta);                                        
-            UploadItmInfoUpsert(infoTable);                                                  
-        
-            // Error 데이터 테이블 구성 (기존)                                             
-            var errorTable = BuildErrorDataTable(lines, eqpid);                              
-        
+
+            // itm_info 업서트 (기존 로직)
+            var infoTable = BuildInfoDataTable(meta);
+            UploadItmInfoUpsert(infoTable);
+
+            // Error 데이터 테이블 구성 (기존)
+            var errorTable = BuildErrorDataTable(lines, eqpid);
+
             // [추가] 허용 Error ID 집합 로드
-            HashSet<string> allowSet = LoadErrorFilterSet();                                  
-        
+            HashSet<string> allowSet = LoadErrorFilterSet();
+
             // [추가] 필터링 적용 (허용 ID만 보존)
             int matched, skipped;
             DataTable filtered = ApplyErrorFilter(errorTable, allowSet, out matched, out skipped);
-        
+
             // [추가] 필터링 결과 로그
             SimpleLogger.Event(string.Format("ErrorFilter ▶ total={0}, matched={1}, skipped={2}",
                                   errorTable != null ? errorTable.Rows.Count : 0, matched, skipped));
-        
+
             // [수정] 허용된 행만 DB 적재
             if (filtered != null && filtered.Rows.Count > 0)
             {
@@ -197,37 +197,37 @@ namespace ErrorDataLib
             }
             else
             {
-                SimpleLogger.Event("No rows after filter ▶ plg_error");                       
+                SimpleLogger.Event("No rows after filter ▶ plg_error");
             }
-        
-            SimpleLogger.Event("Done ▶ " + Path.GetFileName(filePath));                       
+
+            SimpleLogger.Event("Done ▶ " + Path.GetFileName(filePath));
         }
 
         // [추가] Error ID 정규화 (대소문자/공백 차이 제거)
         private static string NormalizeErrorId(object v)
         {
-            if (v == null || v == DBNull.Value) return string.Empty;                          
-            string s = v.ToString().Trim();                                                   
+            if (v == null || v == DBNull.Value) return string.Empty;
+            string s = v.ToString().Trim();
             return s.ToUpperInvariant();
         }
 
         // [추가] public.err_severity_map 에서 허용 Error ID 집합 로드
         private HashSet<string> LoadErrorFilterSet()
         {
-            var set = new HashSet<string>(StringComparer.OrdinalIgnoreCase);                  
+            var set = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             string cs = DatabaseInfo.CreateDefault().GetConnectionString();
 
-            const string SQL = @"SELECT error_id FROM public.err_severity_map;";              
+            const string SQL = @"SELECT error_id FROM public.err_severity_map;";
 
-            using (var conn = new NpgsqlConnection(cs))                                       
+            using (var conn = new NpgsqlConnection(cs))
             {
                 conn.Open();
-                using (var cmd = new NpgsqlCommand(SQL, conn))                                
-                using (var rd = cmd.ExecuteReader())                                          
+                using (var cmd = new NpgsqlCommand(SQL, conn))
+                using (var rd = cmd.ExecuteReader())
                 {
                     while (rd.Read())
                     {
-                        var id = rd.IsDBNull(0) ? string.Empty : rd.GetString(0);             
+                        var id = rd.IsDBNull(0) ? string.Empty : rd.GetString(0);
                         id = NormalizeErrorId(id);
                         if (!string.IsNullOrEmpty(id)) set.Add(id);
                     }
@@ -242,25 +242,25 @@ namespace ErrorDataLib
             matched = 0; skipped = 0;
             if (src == null || src.Rows.Count == 0 || allowSet == null || allowSet.Count == 0)
             {
-                skipped = (src != null) ? src.Rows.Count : 0;                                 
-                return src != null ? src.Clone() : new DataTable();                           
+                skipped = (src != null) ? src.Rows.Count : 0;
+                return src != null ? src.Clone() : new DataTable();
             }
 
             var dst = src.Clone();
             foreach (DataRow r in src.Rows)
             {
-                string id = NormalizeErrorId(r["error_id"]);                                  
-                if (allowSet.Contains(id))                                                    
+                string id = NormalizeErrorId(r["error_id"]);
+                if (allowSet.Contains(id))
                 {
-                    dst.ImportRow(r);                                                         
-                    matched++;                                                                
+                    dst.ImportRow(r);
+                    matched++;
                 }
                 else
                 {
-                    skipped++;                                                                
+                    skipped++;
                 }
             }
-            return dst;                                                                       
+            return dst;
         }
 
         private void UploadItmInfoUpsert(DataTable dt)
@@ -517,8 +517,8 @@ namespace ErrorDataLib
                 using (var tx = conn.BeginTransaction())
                 {
                     var cols = dt.Columns.Cast<DataColumn>().Select(c => c.ColumnName).ToArray();
-                    string colList  = string.Join(",", cols.Select(c => "\"" + c + "\""));
-                    string paramList = string.Join(",", cols.Select(c => "@" + c));                    
+                    string colList = string.Join(",", cols.Select(c => "\"" + c + "\""));
+                    string paramList = string.Join(",", cols.Select(c => "@" + c));
 
                     // [수정] 중복 시 예외 없이 건너뛰기
                     string sql = string.Format(
@@ -528,22 +528,22 @@ namespace ErrorDataLib
                     using (var cmd = new NpgsqlCommand(sql, conn, tx))
                     {
                         foreach (var c in cols)
-                            cmd.Parameters.Add(new NpgsqlParameter("@" + c, DbType.Object));           
+                            cmd.Parameters.Add(new NpgsqlParameter("@" + c, DbType.Object));
 
-                        int inserted = 0;                                                              
+                        int inserted = 0;
                         try
                         {
                             foreach (DataRow r in dt.Rows)
                             {
                                 foreach (var c in cols)
-                                    cmd.Parameters["@" + c].Value = r[c] ?? DBNull.Value;              
+                                    cmd.Parameters["@" + c].Value = r[c] ?? DBNull.Value;
 
                                 int affected = cmd.ExecuteNonQuery();
                                 if (affected == 1) inserted++;
                             }
                             tx.Commit();
 
-                            int skipped = dt.Rows.Count - inserted;                                    
+                            int skipped = dt.Rows.Count - inserted;
                             SimpleLogger.Debug(
                                 string.Format("DB OK ▶ {0}, inserted={1}, total={2}", tableName, inserted, dt.Rows.Count));
                             if (skipped > 0)
@@ -578,7 +578,7 @@ namespace ErrorDataLib
         #region === Utility ===
         private bool WaitForFileReady(string path, int maxRetries, int delayMs)
         {
-            for (int i = 0; i < maxRetries; i++)                                          // [추가]
+            for (int i = 0; i < maxRetries; i++)
             {
                 if (File.Exists(path))
                 {
@@ -596,7 +596,7 @@ namespace ErrorDataLib
                 }
                 Thread.Sleep(delayMs);
             }
-            return false;                                                                 // [추가]
+            return false;
         }
 
         private string GetEqpidFromSettings(string iniPath)
