@@ -345,13 +345,12 @@ namespace Onto_WaferFlatDataLib
         #region === DB Upload ===
         private void UploadToSQL(DataTable dt, string srcFile)
         {
-            /* 1) 컬럼 정의 확장 */
+            // (상단 생략 없음: 전체 메서드)
             if (!dt.Columns.Contains("serv_ts"))
-                dt.Columns.Add("serv_ts", typeof(DateTime));                     // ★ [추가]
+                dt.Columns.Add("serv_ts", typeof(DateTime));
             if (!dt.Columns.Contains("eqpid"))
                 dt.Columns.Add("eqpid", typeof(string));
-
-            /* 2) Row 보정값 반영 */
+        
             foreach (DataRow r in dt.Rows)
             {
                 if (r["datetime"] != DBNull.Value)
@@ -361,52 +360,47 @@ namespace Onto_WaferFlatDataLib
                 }
                 else r["serv_ts"] = DBNull.Value;
             }
-
-            /* 3) DB 연결 */
+        
             var dbInfo = DatabaseInfo.CreateDefault();
             using (var conn = new NpgsqlConnection(dbInfo.GetConnectionString()))
             {
                 conn.Open();
                 using (var tx = conn.BeginTransaction())
                 {
-                    /* 4) 동적 파라미터 목록 */
                     var cols = dt.Columns.Cast<DataColumn>().Select(c => c.ColumnName).ToArray();
-
-                    // PostgreSQL 은 대소문자/예약어 충돌 방지를 위해 "컬럼" 을 큰따옴표로 감쌉니다
+        
+                    // PostgreSQL은 대소문자/예약어 충돌 방지를 위해 "컬럼" 을 큰따옴표로 감쌉니다
                     string colList = string.Join(",", cols.Select(c => $"\"{c}\""));
                     string paramList = string.Join(",", cols.Select(c => "@" + c));
-
-                    string sql = $"INSERT INTO public.wf_flat ({colList}) VALUES ({paramList});";
-
+        
+                    // [수정] 테이블명: public.wf_flat → public.plg_wf_flat
+                    string sql = $"INSERT INTO public.plg_wf_flat ({colList}) VALUES ({paramList});"; // [수정]
+        
                     using (var cmd = new NpgsqlCommand(sql, conn, tx))
                     {
-                        // 2) 파라미터 미리 준비
                         foreach (var c in cols)
                             cmd.Parameters.Add(new NpgsqlParameter("@" + c, DbType.Object));
-
+        
                         int ok = 0;
                         try
                         {
-                            // 3) DataTable → INSERT 루프
                             foreach (DataRow r in dt.Rows)
                             {
                                 foreach (var c in cols)
                                     cmd.Parameters["@" + c].Value = r[c] ?? DBNull.Value;
-
+        
                                 cmd.ExecuteNonQuery();
                                 ok++;
                             }
                             tx.Commit();
                             SimpleLogger.Debug($"DB OK ▶ {ok} rows");
                         }
-                        /* ───── 중복 키(unique_violation = 23505) 전용 ───── */
                         catch (PostgresException pex) when (pex.SqlState == "23505")
                         {
                             tx.Rollback();
                             SimpleLogger.Debug($"Duplicate entry skipped ▶ {pex.Message}");
                             SimpleLogger.Event($"동일한 데이터가 이미 등록되어 업로드가 생략되었습니다 ▶ {srcFile}");
                         }
-                        /* ───── 기타 PostgreSQL 오류 ───── */
                         catch (PostgresException pex)
                         {
                             tx.Rollback();
@@ -418,7 +412,6 @@ namespace Onto_WaferFlatDataLib
                                 sb.AppendLine($"{p.ParameterName} = {p.Value}");
                             SimpleLogger.Error("DB FAIL ▶ " + sb);
                         }
-                        /* ───── 그 외 예외 ───── */
                         catch (Exception ex)
                         {
                             tx.Rollback();
