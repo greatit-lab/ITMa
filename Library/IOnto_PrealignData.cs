@@ -328,8 +328,9 @@ namespace PrealignDataLib
                     string prm = string.Join(",",
                         dt.Columns.Cast<DataColumn>().Select(c => "@" + c.ColumnName));
 
+                    // [수정] 테이블명: public.prealign → public.plg_prealign
                     cmd.CommandText =
-                        $"INSERT INTO public.prealign ({cols}) VALUES ({prm}) " +
+                        $"INSERT INTO public.plg_prealign ({cols}) VALUES ({prm}) " +   // [수정]
                         "ON CONFLICT (eqpid, datetime) DO NOTHING;";
 
                     foreach (DataColumn c in dt.Columns)
