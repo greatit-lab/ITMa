@@ -183,17 +183,17 @@ namespace Onto_WaferFlatDataLib
                 }
                 Thread.Sleep(delayMs);
             }
-            return false;                            // 최종 실패
+            return false;
         }
 
-        private void ProcessFile(string filePath, string eqpid)                       // [추가]
+        private void ProcessFile(string filePath, string eqpid)
         {
             SimpleLogger.Debug($"PARSE ▶ {Path.GetFileName(filePath)}");
 
             /* ---------------------------------------------------- *
              * 0) 파일 읽기
              * ---------------------------------------------------- */
-            string fileContent = ReadAllTextSafe(filePath, Encoding.GetEncoding(949)); // [수정] raw → fileContent
+            string fileContent = ReadAllTextSafe(filePath, Encoding.GetEncoding(949));
             var lines = fileContent.Split(new[] { "\r\n", "\n" }, StringSplitOptions.None);
 
             /* ---------------------------------------------------- *
@@ -232,7 +232,7 @@ namespace Onto_WaferFlatDataLib
             );
             if (hdrIdx == -1)
             {
-                SimpleLogger.Error("Header NOT FOUND → skip");
+                SimpleLogger.Debug("Header NOT FOUND → skip");
                 return;
             }
 
@@ -350,7 +350,7 @@ namespace Onto_WaferFlatDataLib
                 dt.Columns.Add("serv_ts", typeof(DateTime));
             if (!dt.Columns.Contains("eqpid"))
                 dt.Columns.Add("eqpid", typeof(string));
-        
+
             foreach (DataRow r in dt.Rows)
             {
                 if (r["datetime"] != DBNull.Value)
@@ -360,7 +360,7 @@ namespace Onto_WaferFlatDataLib
                 }
                 else r["serv_ts"] = DBNull.Value;
             }
-        
+
             var dbInfo = DatabaseInfo.CreateDefault();
             using (var conn = new NpgsqlConnection(dbInfo.GetConnectionString()))
             {
@@ -368,19 +368,19 @@ namespace Onto_WaferFlatDataLib
                 using (var tx = conn.BeginTransaction())
                 {
                     var cols = dt.Columns.Cast<DataColumn>().Select(c => c.ColumnName).ToArray();
-        
+
                     // PostgreSQL은 대소문자/예약어 충돌 방지를 위해 "컬럼" 을 큰따옴표로 감쌉니다
                     string colList = string.Join(",", cols.Select(c => $"\"{c}\""));
                     string paramList = string.Join(",", cols.Select(c => "@" + c));
-        
+
                     // [수정] 테이블명: public.wf_flat → public.plg_wf_flat
-                    string sql = $"INSERT INTO public.plg_wf_flat ({colList}) VALUES ({paramList});"; // [수정]
-        
+                    string sql = $"INSERT INTO public.plg_wf_flat ({colList}) VALUES ({paramList});";
+
                     using (var cmd = new NpgsqlCommand(sql, conn, tx))
                     {
                         foreach (var c in cols)
                             cmd.Parameters.Add(new NpgsqlParameter("@" + c, DbType.Object));
-        
+
                         int ok = 0;
                         try
                         {
@@ -388,7 +388,7 @@ namespace Onto_WaferFlatDataLib
                             {
                                 foreach (var c in cols)
                                     cmd.Parameters["@" + c].Value = r[c] ?? DBNull.Value;
-        
+
                                 cmd.ExecuteNonQuery();
                                 ok++;
                             }
